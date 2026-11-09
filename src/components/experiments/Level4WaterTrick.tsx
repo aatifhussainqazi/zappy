@@ -1,27 +1,36 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { RotateCcw, Info, ArrowRight, Sparkles, Zap } from 'lucide-react';
+import { 
+  RotateCcw, 
+  Sparkles, 
+  ArrowRight, 
+  Microscope, 
+  Zap, 
+  Trophy,
+  Droplets,
+  Volume2
+} from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
-import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
-import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
+import { InvisibleWorldToggle } from '../ui/InvisibleWorldToggle';
 import { OptionalLearningModal } from '../ui/OptionalLearningModal';
+import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
 import { soundManager } from '../../utils/audio';
 
-type Level4State = 'pick_balloon' | 'rubbing' | 'charged' | 'bending' | 'question' | 'explanation' | 'completed';
+type WaterLevelState = 'pick_balloon' | 'rubbing' | 'charged' | 'bending';
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
   {
     id: 'opt-bend',
-    text: 'Water molecules are polar dipoles that rotate so their positive ends pull toward the balloon!',
+    text: 'Water molecules are polar dipoles that rotate so their positive hydrogen ends pull toward the balloon!',
     isCorrect: true,
     feedback: 'Spot on! H₂O has an uneven charge distribution, making water molecules rotate and bend toward the electric field!',
   },
   {
     id: 'opt-boil',
-    text: 'The water boils and evaporates into hot invisible gas.',
+    text: 'Static electricity creates high heat that boils and evaporates the falling stream.',
     isCorrect: false,
     feedback: 'Static electricity here creates high voltage but negligible current—it has no heating power to boil water!',
   },
@@ -34,19 +43,19 @@ const PREDICTION_OPTIONS: PredictionOption[] = [
 ];
 
 export const Level4WaterTrick: React.FC = () => {
-  const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges } = useGame();
+  const { setDialogue, completeLevel, startLevel, showInvisibleCharges, toggleInvisibleCharges } = useGame();
 
-  const [gameState, setGameState] = useState<Level4State>('pick_balloon');
   const [charge, setCharge] = useState(0); // 0 to 1
-  const [balloonPos, setBalloonPos] = useState({ x: 200, y: 150 });
+  const [balloonPos, setBalloonPos] = useState({ x: 220, y: 150 });
   const [isDragging, setIsDragging] = useState(false);
-  const [isRubbing, setIsRubbing] = useState(false);
-  const [maxBendAchieved, setMaxBendAchieved] = useState(false);
+  const [isRubbingWool, setIsRubbingWool] = useState(false);
+  const [beakerFillLevel, setBeakerFillLevel] = useState(0); // 0 to 100%
 
+  // Modals
+  const [isCompleted, setIsCompleted] = useState(false);
   const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
 
   const benchRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -54,12 +63,12 @@ export const Level4WaterTrick: React.FC = () => {
 
   useEffect(() => {
     setDialogue(
-      "Experiment 4: The Magic Water Trick! Rub the balloon against the wool cloth on the left to charge it, then bring it near the running water tap!",
+      "Case 04: The Water That Moves! Rub the balloon against the wool cloth to charge it, then bring it near the running faucet stream!",
       'excited'
     );
   }, []);
 
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handleBalloonPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     if (!benchRef.current) return;
     const rect = benchRef.current.getBoundingClientRect();
@@ -73,17 +82,19 @@ export const Level4WaterTrick: React.FC = () => {
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging || !benchRef.current) return;
+
     const rect = benchRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const newX = Math.max(15, Math.min(rect.width - 95, mouseX - dragOffset.current.x));
-    const newY = Math.max(15, Math.min(rect.height - 130, mouseY - dragOffset.current.y));
+    // Bounded inside sink laboratory
+    const newX = Math.max(15, Math.min(rect.width - 110, mouseX - dragOffset.current.x));
+    const newY = Math.max(20, Math.min(rect.height - 130, mouseY - dragOffset.current.y));
 
     setBalloonPos({ x: newX, y: newY });
 
-    // Check rubbing wool patch on left (x: 20 to 220, y: 80 to 300)
-    const isOverWool = newX <= 220 && newY >= 70 && newY <= 300;
+    // Wool swatch zone: left 25px to 210px, top 40px to 270px
+    const isOverWool = newX <= 220 && newY >= 35 && newY <= 275;
 
     if (isOverWool && lastPointerPos.current) {
       const dx = e.clientX - lastPointerPos.current.x;
@@ -91,16 +102,15 @@ export const Level4WaterTrick: React.FC = () => {
       const moveDist = Math.hypot(dx, dy);
 
       if (moveDist > 6) {
-        setIsRubbing(true);
+        setIsRubbingWool(true);
         setCharge((prev) => {
-          const next = Math.min(1, prev + moveDist * 0.0025);
+          const next = Math.min(1, prev + moveDist * 0.0028);
           soundManager.playRubbing(0.7);
           soundManager.playChargeHum(next);
 
-          if (next >= 0.75 && gameState === 'pick_balloon') {
-            setGameState('charged');
+          if (next >= 0.75 && prev < 0.75) {
             setDialogue(
-              "FULLY CHARGED! Now drag the balloon close to the running tap water on the right and watch the stream!",
+              "CHARGED! Now slowly move the balloon towards the flowing water stream on the right!",
               'excited'
             );
           }
@@ -108,113 +118,149 @@ export const Level4WaterTrick: React.FC = () => {
         });
       }
     } else {
-      setIsRubbing(false);
+      setIsRubbingWool(false);
+    }
+
+    // Metal faucet pipe touch (discharges balloon if touched)
+    const faucetX = rect.width - 180;
+    if (Math.abs(newX + 45 - faucetX) < 35 && newY < 120 && charge > 0.05) {
+      soundManager.playSpark();
+      setCharge(0);
+      setDialogue("TOUCHED METAL TAP! Metal plumbing grounded the extra electrons, discharging the balloon!", 'thinking');
     }
 
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
-
-    // Water stream bending check
-    // The faucet spout is located at approx x = rect.width - 150
-    const streamX = rect.width - 150;
-    const distToStream = Math.abs(newX + 45 - streamX);
-
-    if (charge >= 0.7 && distToStream < 190 && !maxBendAchieved && !isCompleted) {
-      setMaxBendAchieved(true);
-      setIsCompleted(true);
-      setGameState('bending');
-      soundManager.playAttract();
-      soundManager.playFanfare();
-      completeLevel('level-4', 3, 200);
-
-      confetti({
-        particleCount: 70,
-        spread: 65,
-        origin: { y: 0.6 },
-        colors: ['#0ea5e9', '#38bdf8', '#facc15', '#10b981'],
-      });
-
-      setDialogue(
-        "LOOK AT THAT! THE WATER STREAM IS BENDING! Water molecules are rotating to pull toward the balloon! Choose what to explore next!",
-        'celebrating'
-      );
-
-      setTimeout(() => {
-        setShowLearningChoice(true);
-      }, 800);
-    }
   };
 
   const handlePointerUp = () => {
     setIsDragging(false);
-    setIsRubbing(false);
+    setIsRubbingWool(false);
     lastPointerPos.current = null;
   };
 
-  // Calculate stream bend for rendering
+  // Continuous stream calculation
   const benchWidth = benchRef.current ? benchRef.current.clientWidth : 800;
-  const streamX = benchWidth - 150;
-  const distToStream = Math.abs(balloonPos.x + 45 - streamX);
-  let streamBend = 0;
-  if (charge >= 0.3 && distToStream < 260) {
-    const intensity = (1 - distToStream / 260) * charge;
-    const direction = balloonPos.x + 45 < streamX ? -1 : 1;
-    streamBend = direction * intensity * 85;
-  }
+  const faucetX = benchWidth - 170;
+  const faucetY = 55;
+  const balloonCenterX = balloonPos.x + 45;
+  const balloonCenterY = balloonPos.y + 50;
+
+  // Distance from balloon to falling stream
+  const distToStream = Math.abs(balloonCenterX - faucetX);
+  const streamPull = charge >= 0.25 && distToStream < 260
+    ? ((260 - distToStream) / 260) * charge * (balloonCenterX < faucetX ? -1 : 1)
+    : 0;
+
+  // Max bend pixel deflection
+  const maxDeflectionX = streamPull * 85;
+
+  // Target Beaker mouth located at faucetX - 70, y: 320
+  const beakerX = faucetX - 72;
+  const beakerY = 320;
+  const streamBottomX = faucetX + maxDeflectionX * 1.1;
+  const isPouringIntoBeaker = Math.abs(streamBottomX - (beakerX + 30)) < 24 && charge >= 0.65;
+
+  // Stream filling beaker interval effect
+  useEffect(() => {
+    if (!isPouringIntoBeaker || isCompleted) return;
+
+    const interval = setInterval(() => {
+      setBeakerFillLevel((prev) => {
+        const next = Math.min(100, prev + 6);
+        soundManager.playPaperFlutter();
+
+        if (next >= 100 && !isCompleted) {
+          setIsCompleted(true);
+          soundManager.playFanfare();
+          completeLevel('level-4', 3, 220);
+
+          confetti({
+            particleCount: 75,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#38bdf8', '#0ea5e9', '#facc15', '#10b981'],
+          });
+
+          setDialogue(
+            "TARGET BEAKER FILLED! Pure electrostatic field curved the water stream right into the cup! Mystery Solved!",
+            'celebrating'
+          );
+
+          setTimeout(() => {
+            setShowLearningChoice(true);
+          }, 800);
+        }
+        return next;
+      });
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [isPouringIntoBeaker, isCompleted]);
 
   const resetExperiment = () => {
     soundManager.playClick();
     setCharge(0);
-    setBalloonPos({ x: 200, y: 150 });
-    setMaxBendAchieved(false);
-    setGameState('pick_balloon');
+    setBalloonPos({ x: 220, y: 150 });
+    setBeakerFillLevel(0);
     setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
     setDialogue(
-      "Reset! Rub the balloon against the wool cloth and bring it close to the running tap!",
+      "Reset! Rub the balloon against the wool cloth and bring it close to deflect the falling water!",
       'excited'
     );
   };
 
   return (
     <div
-      className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
+      className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-3 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      {/* Top Header Controls */}
+      {/* Top Objective Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg">
+          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg shadow">
             #4
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-black text-white leading-tight">
-              The Magic Water Trick
-            </h1>
-            <p className="text-xs font-bold text-sky-400">
-              {charge < 0.75
-                ? "Step 1: Rub the balloon on the wool cloth until fully charged"
-                : "Step 2: Bring the charged balloon close to the running water stream!"}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-400 bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
+                CASE 04
+              </span>
+              <h1 className="text-base sm:text-lg font-black text-white leading-tight">
+                The Water That Moves
+              </h1>
+            </div>
+            <p className="text-xs font-bold text-amber-300">
+              {charge < 0.65
+                ? "Step 1: Rub the balloon on wool cloth to accumulate negative electrons"
+                : beakerFillLevel < 100
+                ? `Step 2: Deflect the stream into the target beaker! (${beakerFillLevel}% filled)`
+                : "Beaker filled! The electric field bent the stream without contact!"}
             </p>
           </div>
         </div>
 
+        {/* Top Controls: Invisible World Switch & Reset */}
         <div className="flex items-center gap-2">
-          <ParticleVisualizationToggle
+          <InvisibleWorldToggle
             active={showInvisibleCharges}
             onToggle={toggleInvisibleCharges}
           />
+
           <button
             type="button"
             onClick={() => setShowExplanation(true)}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            title="Read Scientific Guide"
           >
-            <Info className="w-4 h-4" />
+            <Microscope className="w-4 h-4 text-sky-400" />
             <span className="hidden sm:inline">Science Guide</span>
           </button>
+
           <button
             type="button"
             onClick={resetExperiment}
@@ -226,12 +272,16 @@ export const Level4WaterTrick: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Sink Workbench */}
+      {/* Main Kitchen / Sink Laboratory Bench */}
       <div
         ref={benchRef}
-        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-cyan-950/30 via-slate-900/90 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]"
+        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-sky-950/20 via-slate-900 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px] border-2 border-slate-700"
       >
-        {/* Charge Meter HUD */}
+        {/* Sink basin backdrop */}
+        <div className="absolute right-12 sm:right-20 bottom-0 w-64 sm:w-72 h-44 bg-slate-800/80 rounded-t-3xl border-t-4 border-x-4 border-slate-600 shadow-inner pointer-events-none" />
+        <div className="absolute right-36 sm:right-48 bottom-4 w-16 h-8 rounded-full bg-slate-950 border-2 border-slate-700 pointer-events-none" />
+
+        {/* Charge Meter HUD Overlay */}
         <div className="absolute top-4 left-4 z-20">
           <ChargeMeter
             charge={charge}
@@ -241,129 +291,134 @@ export const Level4WaterTrick: React.FC = () => {
           />
         </div>
 
-        {/* Legend */}
-        {showInvisibleCharges && (
-          <div className="absolute top-4 left-64 z-20 hidden md:block">
-            <ParticleLegend />
+        {/* WOOL CLOTH (Friction Target on Left) */}
+        <div className="absolute left-6 sm:left-12 top-14 w-44 sm:w-52 h-44 sm:h-52 rounded-3xl bg-amber-800 border-4 border-amber-600 comic-border-lg p-3 flex flex-col justify-between shadow-xl pointer-events-none z-10">
+          <div className="bg-amber-950/90 text-amber-200 text-center font-black text-xs py-1 rounded-xl">
+            WOOL CLOTH
           </div>
-        )}
-
-        {/* WOOL CLOTH (Left) */}
-        <div className="absolute left-8 sm:left-14 top-20 w-44 h-44 rounded-3xl bg-amber-800/80 border-4 border-amber-600 comic-border-lg p-3 flex flex-col justify-between shadow-xl pointer-events-none">
-          <div className="flex items-center justify-between text-xs font-black uppercase text-amber-200">
-            <span>Wool Cloth</span>
-            <span>🧶</span>
-          </div>
-          <div className="text-center text-amber-300/50 text-[11px] font-mono font-bold leading-tight">
-            DRAG & RUB
-            <br />
-            BALLOON HERE
-          </div>
-          <div className="text-[10px] text-center font-bold text-amber-200">
-            {charge >= 0.75 ? '⚡ FULLY CHARGED!' : `Charge: ${Math.round(charge * 100)}%`}
+          <div className="text-3xl text-center opacity-40">🧶</div>
+          <div className="text-[10px] text-amber-300 text-center font-bold">
+            {isRubbingWool ? "Rubbing builds charge!" : "Rub balloon back & forth here"}
           </div>
         </div>
 
-        {/* SINK & FAUCET (Right) */}
-        <div className="absolute right-8 sm:right-20 top-6 bottom-6 w-64 pointer-events-none flex flex-col items-center justify-between">
-          <svg width="180" height="130" viewBox="0 0 180 130" className="overflow-visible">
-            <path
-              d="M140 130 L140 40 Q140 15 115 15 L50 15 Q30 15 30 35 L30 65"
-              fill="none"
-              stroke="#ca8a04"
-              strokeWidth="16"
-              strokeLinecap="round"
-            />
-            <rect x="20" y="65" width="20" height="12" rx="3" fill="#a16207" stroke="#0f172a" strokeWidth="2.5" />
-            <circle cx="115" cy="8" r="8" fill="#ef4444" stroke="#0f172a" strokeWidth="2.5" />
-          </svg>
-
-          {/* Water Stream */}
-          <div className="relative w-full flex-1 -mt-8 flex justify-center">
-            <svg width="220" height="260" viewBox="0 0 220 260" className="overflow-visible">
-              <path
-                d={`M 110 0 Q ${110 + streamBend} 120, ${110 + streamBend * 0.4} 240`}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="8"
-                strokeLinecap="round"
-                opacity="0.85"
-              />
-              <path
-                d={`M 110 0 Q ${110 + streamBend} 120, ${110 + streamBend * 0.4} 240`}
-                fill="none"
-                stroke="#ffffff"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                opacity="0.75"
-              />
-
-              {showInvisibleCharges && (
-                <g>
-                  {[40, 90, 140, 190].map((yVal, idx) => {
-                    const xVal = 110 + (streamBend * (yVal / 240));
-                    const angle = streamBend < 0 ? -45 : 45;
-                    return (
-                      <g key={idx} transform={`translate(${xVal}, ${yVal}) rotate(${angle})`}>
-                        <circle cx="0" cy="0" r="7" fill="#0ea5e9" stroke="#0f172a" strokeWidth="1.5" />
-                        <text x="0" y="3" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">−</text>
-                        <circle cx="-7" cy="-7" r="4.5" fill="#ef4444" stroke="#0f172a" strokeWidth="1.2" />
-                        <text x="-7" y="-5" textAnchor="middle" fill="#ffffff" fontSize="6" fontWeight="bold">+</text>
-                        <circle cx="7" cy="-7" r="4.5" fill="#ef4444" stroke="#0f172a" strokeWidth="1.2" />
-                        <text x="7" y="-5" textAnchor="middle" fill="#ffffff" fontSize="6" fontWeight="bold">+</text>
-                      </g>
-                    );
-                  })}
-                </g>
-              )}
-            </svg>
-          </div>
-
-          <div className="w-48 h-8 bg-slate-800 rounded-full border-4 border-slate-700 flex items-center justify-center shadow-inner">
-            <div className="w-12 h-4 bg-slate-950 rounded-full border border-slate-600" />
+        {/* CHROME FAUCET FIXTURE (On Right) */}
+        <div className="absolute right-28 sm:right-36 top-6 w-20 h-28 pointer-events-none z-20 flex flex-col items-center">
+          {/* Faucet gooseneck pipe */}
+          <div className="w-5 h-20 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-400 rounded-t-full shadow-lg border border-slate-400" />
+          <div className="w-10 h-6 bg-gradient-to-r from-slate-400 via-slate-200 to-slate-500 rounded-b-xl shadow-md border border-slate-400 flex items-center justify-center">
+            <div className="w-4 h-2 bg-slate-900 rounded-full" />
           </div>
         </div>
 
-        {/* DRAGGABLE BALLOON */}
-        <motion.div
-          className="absolute z-20 cursor-grab active:cursor-grabbing select-none"
-          style={{ left: balloonPos.x, top: balloonPos.y }}
-          onPointerDown={handlePointerDown}
+        {/* TARGET GRADUATED BEAKER / CUP (Target in Sink) */}
+        <div
+          style={{
+            position: 'absolute',
+            left: `${beakerX}px`,
+            top: `${beakerY}px`,
+          }}
+          className="w-16 h-24 rounded-b-2xl border-2 border-sky-300 bg-sky-950/40 backdrop-blur-sm shadow-xl flex flex-col justify-end p-1 z-15 pointer-events-none"
         >
-          <div className="relative">
-            <svg width="90" height="120" viewBox="0 0 90 120" className="drop-shadow-2xl">
-              <defs>
-                <radialGradient id="balloonWaterGrad" cx="35%" cy="35%" r="65%">
-                  <stop offset="0%" stopColor="#f87171" />
-                  <stop offset="65%" stopColor="#dc2626" />
-                  <stop offset="100%" stopColor="#991b1b" />
-                </radialGradient>
-              </defs>
-              <ellipse cx="45" cy="50" rx="38" ry="46" fill="url(#balloonWaterGrad)" stroke="#0f172a" strokeWidth="4" />
-              <ellipse cx="30" cy="32" rx="9" ry="16" fill="#ffffff" opacity="0.45" transform="rotate(-20 30 32)" />
-              <polygon points="41,96 49,96 45,103" fill="#991b1b" stroke="#0f172a" strokeWidth="2.5" />
-              <path d="M45 103 Q38 112 46 120 Q52 128 45 135" fill="none" stroke="#e2e8f0" strokeWidth="2.5" />
+          {/* Beaker Volume Tick Marks */}
+          <div className="absolute right-1 inset-y-2 flex flex-col justify-between text-[7px] text-sky-300/80 font-mono">
+            <span>- 100</span>
+            <span>- 75</span>
+            <span>- 50</span>
+            <span>- 25</span>
+          </div>
 
-              {charge >= 0.75 && (
-                <ellipse
-                  cx="45"
-                  cy="50"
-                  rx="41"
-                  ry="49"
-                  fill="none"
-                  stroke="#38bdf8"
-                  strokeWidth="2.5"
-                  className="animate-spark-pulse"
-                />
-              )}
-            </svg>
+          {/* Liquid fill volume */}
+          <div
+            className="w-full bg-gradient-to-t from-sky-500 to-sky-300 rounded-b-xl transition-all duration-200 shadow-[0_0_12px_#38bdf8]"
+            style={{ height: `${beakerFillLevel}%` }}
+          />
+
+          <div className="absolute -top-5 inset-x-0 text-center text-[9px] font-black text-yellow-300 bg-slate-900/90 rounded px-1">
+            TARGET CUP
+          </div>
+        </div>
+
+        {/* CONTINUOUS LAMINAR WATER STREAM SVG */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible">
+          <defs>
+            <linearGradient id="streamGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#bae6fd" stopOpacity="0.8" />
+              <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.95" />
+              <stop offset="100%" stopColor="#0284c7" stopOpacity="0.8" />
+            </linearGradient>
+          </defs>
+
+          {/* Smooth Continuous Water Stream Curve */}
+          <path
+            d={`M ${faucetX} ${faucetY} Q ${faucetX + maxDeflectionX} ${(faucetY + 360) / 2} ${streamBottomX} 360`}
+            fill="none"
+            stroke="url(#streamGrad)"
+            strokeWidth="7"
+            strokeLinecap="round"
+          />
+
+          {/* Inner core shimmer */}
+          <path
+            d={`M ${faucetX} ${faucetY} Q ${faucetX + maxDeflectionX} ${(faucetY + 360) / 2} ${streamBottomX} 360`}
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray="12 8"
+          />
+
+          {/* Rotating H2O Dipoles in Invisible World Mode */}
+          {showInvisibleCharges && (
+            <g>
+              {[0.25, 0.5, 0.75].map((ratio, i) => {
+                const py = faucetY + ratio * (360 - faucetY);
+                const px = faucetX + maxDeflectionX * (1 - Math.pow(1 - ratio, 2));
+
+                return (
+                  <g key={i} transform={`translate(${px}, ${py})`}>
+                    <circle r="6" fill="#ef4444" />
+                    <text x="0" y="3" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">
+                      O
+                    </text>
+                    {/* Hydrogens aligned toward negative balloon */}
+                    <circle cx={streamPull < 0 ? -9 : 9} cy="-4" r="3.5" fill="#38bdf8" />
+                    <circle cx={streamPull < 0 ? -9 : 9} cy="4" r="3.5" fill="#38bdf8" />
+                  </g>
+                );
+              })}
+            </g>
+          )}
+        </svg>
+
+        {/* DRAGGABLE CHARGED BALLOON */}
+        <motion.div
+          style={{
+            position: 'absolute',
+            left: `${balloonPos.x}px`,
+            top: `${balloonPos.y}px`,
+            touchAction: 'none',
+          }}
+          onPointerDown={handleBalloonPointerDown}
+          className="w-22 sm:w-26 h-30 sm:h-34 cursor-grab active:cursor-grabbing z-30 select-none flex flex-col items-center"
+        >
+          <div
+            className={`w-20 sm:w-24 h-26 sm:h-30 rounded-[50%_50%_45%_45%] shadow-2xl transition-all border-2 flex flex-col items-center justify-center text-white font-black text-xs ${
+              charge >= 0.65
+                ? 'bg-gradient-to-br from-purple-500 to-purple-700 shadow-[0_0_24px_rgba(168,85,247,0.7)] border-purple-200'
+                : 'bg-gradient-to-br from-purple-400 to-purple-600 border-purple-300 shadow-xl'
+            }`}
+          >
+            <div className="absolute top-2 left-3 w-4 h-7 bg-white/40 rounded-full rotate-[-25deg] blur-[1px] pointer-events-none" />
+            <span>RUBBER</span>
+            <span className="text-sm">🎈</span>
 
             {showInvisibleCharges && charge > 0.1 && (
-              <div className="absolute inset-0 flex flex-wrap items-center justify-center p-3 gap-1 pointer-events-none">
+              <div className="absolute inset-0 flex flex-wrap items-center justify-center p-2 gap-1 pointer-events-none">
                 {Array.from({ length: Math.min(8, Math.floor(charge * 9)) }).map((_, i) => (
                   <span
                     key={i}
-                    className="w-4 h-4 rounded-full bg-sky-400 text-slate-950 font-black text-[10px] flex items-center justify-center shadow-[0_0_6px_#38bdf8] border border-sky-200"
+                    className="w-3.5 h-3.5 rounded-full bg-sky-400 text-slate-950 font-black text-[9px] flex items-center justify-center shadow-[0_0_6px_#38bdf8] border border-sky-200"
                   >
                     −
                   </span>
@@ -371,15 +426,16 @@ export const Level4WaterTrick: React.FC = () => {
               </div>
             )}
           </div>
+          <div className="w-2.5 h-2 bg-purple-800 rounded-sm" />
         </motion.div>
       </div>
 
-      {/* Bottom Professor Zappy & Action */}
+      {/* Bottom Professor Zappy & Action Bar */}
       <div className="relative z-30 flex items-end justify-between">
         <ProfessorZappy
           size="md"
           position="inline"
-          mood={maxBendAchieved ? 'excited' : isRubbing ? 'surprised' : 'idle'}
+          mood={beakerFillLevel >= 100 ? 'celebrating' : isRubbingWool ? 'surprised' : 'idle'}
           staticHairCharge={charge}
         />
 
@@ -391,14 +447,14 @@ export const Level4WaterTrick: React.FC = () => {
               className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Experiment Menu</span>
+              <span>Case Menu</span>
             </button>
             <button
               type="button"
               onClick={() => startLevel('level-5')}
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
             >
-              <span>Next Station →</span>
+              <span>Next Case →</span>
             </button>
           </div>
         )}
@@ -407,7 +463,7 @@ export const Level4WaterTrick: React.FC = () => {
       {/* OPTIONAL LEARNING MODAL */}
       <OptionalLearningModal
         isOpen={showLearningChoice}
-        levelTitle="The Magic Water Trick"
+        levelTitle="The Water That Moves"
         onKeepExperimenting={() => setShowLearningChoice(false)}
         onLearnWhy={() => {
           setShowLearningChoice(false);
@@ -444,7 +500,7 @@ export const Level4WaterTrick: React.FC = () => {
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h2 className="text-xl sm:text-2xl font-black text-yellow-300 flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-yellow-400" />
+                  <Microscope className="w-6 h-6 text-yellow-400" />
                   <span>The Science of Bending Water</span>
                 </h2>
                 <button

@@ -1,23 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { RotateCcw, Info, ArrowRight, Sparkles } from 'lucide-react';
+import { 
+  RotateCcw, 
+  Sparkles, 
+  ArrowRight, 
+  Microscope, 
+  Zap, 
+  Wind,
+  CloudRain,
+  Flame,
+  Volume2
+} from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
-import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
-import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
+import { InvisibleWorldToggle } from '../ui/InvisibleWorldToggle';
 import { OptionalLearningModal } from '../ui/OptionalLearningModal';
+import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
 import { soundManager } from '../../utils/audio';
 
-type Level5State = 'colliding' | 'striking' | 'question' | 'explanation' | 'completed';
+type StormPhase = 'calm' | 'building' | 'striking';
 
-interface CloudParticle {
+interface StormParticle {
   id: number;
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   type: 'ice' | 'graupel';
-  isColliding: boolean;
+  charge: 'positive' | 'negative';
 }
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
@@ -42,363 +54,387 @@ const PREDICTION_OPTIONS: PredictionOption[] = [
 ];
 
 export const Level5LightningStorm: React.FC = () => {
-  const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges, settings } = useGame();
+  const { setDialogue, completeLevel, startLevel, showInvisibleCharges, toggleInvisibleCharges, settings } = useGame();
 
-  const [gameState, setGameState] = useState<Level5State>('colliding');
-  const [stormCharge, setStormCharge] = useState(0); // 0 to 1
+  const [updraftSpeed, setUpdraftSpeed] = useState(20); // 0 to 50 m/s
+  const [electricField, setElectricField] = useState(0); // 0 to 1 (Breakdown at 1.0)
   const [isStriking, setIsStriking] = useState(false);
+  const [thunderDelay, setThunderDelay] = useState(2); // seconds
+  const [isThunderRumbling, setIsThunderRumbling] = useState(false);
 
+  // Modals
+  const [isCompleted, setIsCompleted] = useState(false);
   const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
 
-  // Cloud particles inside the thundercloud
-  const [particles, setParticles] = useState<CloudParticle[]>(() =>
-    Array.from({ length: 16 }).map((_, i) => ({
+  // Storm Particles (Ice crystals & Graupel)
+  const [particles, setParticles] = useState<StormParticle[]>(() =>
+    Array.from({ length: 24 }).map((_, i) => ({
       id: i,
-      x: 120 + (i % 6) * 60 + Math.random() * 20,
-      y: 60 + Math.floor(i / 6) * 35 + Math.random() * 15,
+      x: 80 + (i % 8) * 75 + Math.random() * 20,
+      y: 60 + Math.floor(i / 8) * 45 + Math.random() * 15,
+      vx: (Math.random() - 0.5) * 2,
+      vy: (Math.random() - 0.5) * 2,
       type: i % 2 === 0 ? 'ice' : 'graupel',
-      isColliding: false,
+      charge: i % 2 === 0 ? 'positive' : 'negative',
     }))
   );
-
-  const [activeParticleId, setActiveParticleId] = useState<number | null>(null);
-  const benchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     soundManager.setMusicTrack('storm');
     setDialogue(
-      "Experiment 5: The Sky's Giant Spark! Drag ice crystals inside the thundercloud to collide them and separate massive electric charges!",
+      "Case 05: The Sky's Giant Spark! Increase the storm updraft to sweep light ice crystals upward while heavy graupel sinks, building voltage until lightning arcs!",
       'excited'
     );
+
     return () => {
       soundManager.setMusicTrack('lab');
     };
   }, []);
 
-  const triggerLightningStrike = () => {
+  // Storm Simulation Loop
+  useEffect(() => {
+    if (isStriking || isCompleted) return;
+
+    const interval = setInterval(() => {
+      setParticles((prev) =>
+        prev.map((p) => {
+          // Updraft lifts lighter ice crystals toward cloud top, while graupel falls toward cloud base
+          const targetY = p.type === 'ice'
+            ? Math.max(30, p.y - (updraftSpeed * 0.08) + Math.random() * 2)
+            : Math.min(220, p.y + (25 - updraftSpeed * 0.3) * 0.1 + Math.random() * 2);
+
+          const nextX = Math.max(40, Math.min(760, p.x + p.vx));
+
+          return {
+            ...p,
+            x: nextX,
+            y: targetY,
+          };
+        })
+      );
+
+      // Charge separation increases when updraft is strong enough (> 25 m/s)
+      if (updraftSpeed >= 25 && !isStriking) {
+        setElectricField((prev) => {
+          const delta = (updraftSpeed / 50) * 0.045;
+          const next = Math.min(1, prev + delta);
+
+          if (next >= 1 && prev < 1 && !isStriking) {
+            triggerDischarge();
+          }
+          return next;
+        });
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [updraftSpeed, isStriking, isCompleted]);
+
+  const triggerDischarge = () => {
     setIsStriking(true);
-    setGameState('striking');
-    setIsCompleted(true);
-    soundManager.playThunder(settings.reducedFlash);
-    soundManager.playFanfare();
-    completeLevel('level-5', 3, 220);
+    soundManager.playSpark();
 
-    confetti({
-      particleCount: 80,
-      spread: 75,
-      origin: { y: 0.5 },
-      colors: ['#38bdf8', '#facc15', '#ffffff', '#a855f7'],
-    });
-
-    setDialogue("KA-BOOOOM! A SPECTACULAR LIGHTNING STRIKE! Stepped leader connects to the upward streamer! Choose what to explore next!", 'celebrating');
+    // After brief flash, play delayed thunder boom!
+    setTimeout(() => {
+      soundManager.playThunder(settings.reducedFlash);
+      setIsThunderRumbling(true);
+      setTimeout(() => setIsThunderRumbling(false), 2000);
+    }, thunderDelay * 600);
 
     setTimeout(() => {
       setIsStriking(false);
+      setIsCompleted(true);
+      completeLevel('level-5', 3, 250);
+
+      confetti({
+        particleCount: 80,
+        spread: 75,
+        origin: { y: 0.5 },
+        colors: ['#38bdf8', '#facc15', '#ffffff', '#a855f7'],
+      });
+
+      setDialogue(
+        "KABOOOOM! AIR BREAKDOWN ACHIEVED! A blinding stepped leader connected to the upward streamer! Choose what to explore next!",
+        'celebrating'
+      );
+
       setTimeout(() => {
         setShowLearningChoice(true);
-      }, 600);
+      }, 900);
     }, 700);
-  };
-
-  const handlePointerDown = (id: number) => {
-    setActiveParticleId(id);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (activeParticleId === null || !benchRef.current || gameState !== 'colliding') return;
-    const rect = benchRef.current.getBoundingClientRect();
-    const newX = Math.max(40, Math.min(rect.width - 60, e.clientX - rect.left));
-    const newY = Math.max(30, Math.min(220, e.clientY - rect.top));
-
-    setParticles((prev) => {
-      return prev.map((p) => {
-        if (p.id === activeParticleId) {
-          return { ...p, x: newX, y: newY };
-        }
-
-        // Collision check
-        const dist = Math.hypot(p.x - newX, p.y - newY);
-        if (dist < 45 && !p.isColliding) {
-          soundManager.playSpark();
-          setStormCharge((sc) => {
-            const nextSc = Math.min(1, sc + 0.08);
-            if (nextSc >= 1 && !isStriking && gameState === 'colliding') {
-              triggerLightningStrike();
-            }
-            return nextSc;
-          });
-          return { ...p, isColliding: true };
-        }
-        return { ...p, isColliding: false };
-      });
-    });
-  };
-
-  const handlePointerUp = () => {
-    setActiveParticleId(null);
   };
 
   const resetExperiment = () => {
     soundManager.playClick();
-    setStormCharge(0);
+    setUpdraftSpeed(20);
+    setElectricField(0);
     setIsStriking(false);
-    setGameState('colliding');
+    setIsThunderRumbling(false);
     setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
-    setDialogue("Reset! Stir up the ice crystals to build another thunderstorm!", 'excited');
+    setDialogue(
+      "Reset! Adjust the updraft slider to separate ice particles and build electric field potential!",
+      'excited'
+    );
   };
 
   return (
     <div
-      className={`relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between transition-colors duration-100 ${
+      className={`relative min-h-[calc(100vh-65px)] bg-slate-950 p-3 sm:p-6 overflow-hidden select-none flex flex-col justify-between transition-colors duration-150 ${
         isStriking && !settings.reducedFlash ? 'bg-slate-100' : ''
       }`}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
     >
       {/* Reduced flash soft glow overlay */}
       {isStriking && settings.reducedFlash && (
         <div className="absolute inset-0 bg-yellow-300/30 pointer-events-none z-50 animate-pulse" />
       )}
 
-      {/* Screen Shake effect on strike */}
-      <motion.div
-        className="w-full h-full flex flex-col justify-between"
-        animate={
-          isStriking && !settings.reducedMotion
-            ? { x: [-12, 12, -8, 8, 0], y: [8, -8, 6, -6, 0] }
-            : {}
-        }
-        transition={{ duration: 0.4 }}
-      >
-        {/* Top Header Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg">
-              #5
-            </div>
-            <div>
-              <h1 className="text-lg sm:text-xl font-black text-white leading-tight">
+      {/* Top Objective Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg shadow">
+            #5
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-400 bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
+                CASE 05
+              </span>
+              <h1 className="text-base sm:text-lg font-black text-white leading-tight">
                 The Sky's Giant Spark
               </h1>
-              <p className="text-xs font-bold text-sky-400">
-                {stormCharge < 1
-                  ? "Step 1: Collide ice particles inside the cloud to build up electrical voltage!"
-                  : "Massive lightning discharge triggered!"}
-              </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <ParticleVisualizationToggle
-              active={showInvisibleCharges}
-              onToggle={toggleInvisibleCharges}
-            />
-            <button
-              type="button"
-              onClick={() => setShowExplanation(true)}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
-            >
-              <Info className="w-4 h-4" />
-              <span className="hidden sm:inline">Science Guide</span>
-            </button>
-            <button
-              type="button"
-              onClick={resetExperiment}
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl comic-border comic-button"
-              title="Reset Experiment"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
+            <p className="text-xs font-bold text-amber-300">
+              {electricField < 1
+                ? `Step 1: Increase updraft to build electric field! (${Math.round(electricField * 100)}% Breakdown)`
+                : "Air ionization reached! Massive lightning strike discharge!"}
+            </p>
           </div>
         </div>
 
-        {/* Storm Sky & Landscape Workbench */}
-        <div
-          ref={benchRef}
-          className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-slate-900 via-indigo-950/80 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]"
-        >
-          {/* Storm Charge Meter HUD */}
-          <div className="absolute top-4 left-4 z-20">
-            <ChargeMeter
-              charge={stormCharge}
-              polarity="negative"
-              label="Atmospheric Voltage"
-              showNeedle={true}
-            />
-          </div>
-
-          {/* Legend */}
-          {showInvisibleCharges && (
-            <div className="absolute top-4 left-64 z-20 hidden md:block">
-              <ParticleLegend />
-            </div>
-          )}
-
-          {/* Rain streaks */}
-          <div className="absolute inset-0 pointer-events-none opacity-30 overflow-hidden">
-            {Array.from({ length: 25 }).map((_, i) => (
-              <div
-                key={i}
-                className="absolute w-0.5 h-6 bg-sky-400 rotate-12"
-                style={{
-                  left: `${(i * 17) % 100}%`,
-                  top: `${(i * 23) % 100}%`,
-                }}
-              />
-            ))}
-          </div>
-
-          {/* TOWERING THUNDERCLOUD (Cumulonimbus) */}
-          <div className="relative mx-auto w-full max-w-2xl h-56 mt-4">
-            <svg width="100%" height="220" viewBox="0 0 600 220" className="overflow-visible">
-              <defs>
-                <linearGradient id="cloudGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor={stormCharge > 0.6 ? '#334155' : '#64748b'}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={stormCharge > 0.6 ? '#0f172a' : '#1e293b'}
-                  />
-                </linearGradient>
-              </defs>
-
-              <ellipse cx="300" cy="110" rx="260" ry="85" fill="url(#cloudGrad)" stroke="#0f172a" strokeWidth="4" />
-              <circle cx="180" cy="80" r="75" fill="url(#cloudGrad)" />
-              <circle cx="320" cy="60" r="90" fill="url(#cloudGrad)" />
-              <circle cx="440" cy="85" r="70" fill="url(#cloudGrad)" />
-
-              {showInvisibleCharges && (
-                <g>
-                  <text x="200" y="55" fill="#ef4444" fontSize="16" fontWeight="900">+</text>
-                  <text x="310" y="45" fill="#ef4444" fontSize="16" fontWeight="900">+</text>
-                  <text x="420" y="55" fill="#ef4444" fontSize="16" fontWeight="900">+</text>
-                  <text x="170" y="155" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
-                  <text x="240" y="165" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
-                  <text x="310" y="170" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
-                  <text x="380" y="165" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
-                  <text x="450" y="155" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
-                </g>
-              )}
-            </svg>
-
-            {/* Draggable colliding ice crystals inside cloud */}
-            <div className="absolute inset-0 pointer-events-auto">
-              {particles.map((p) => (
-                <motion.div
-                  key={p.id}
-                  className="absolute cursor-grab active:cursor-grabbing p-1.5 select-none"
-                  style={{ left: p.x, top: p.y }}
-                  onPointerDown={() => handlePointerDown(p.id)}
-                  whileHover={{ scale: 1.2 }}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shadow-lg border-2 ${
-                      p.type === 'ice'
-                        ? 'bg-sky-200 border-sky-400 text-sky-950'
-                        : 'bg-indigo-300 border-indigo-500 text-indigo-950'
-                    }`}
-                  >
-                    {p.type === 'ice' ? '❄️' : '🧊'}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
-          {/* LIGHTNING BOLT (Active during strike) */}
-          {isStriking && (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none z-40 overflow-visible">
-              <polyline
-                points="330,170 310,240 350,280 290,360 330,420 300,470"
-                fill="none"
-                stroke="#ffffff"
-                strokeWidth="10"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <polyline
-                points="330,170 310,240 350,280 290,360 330,420 300,470"
-                fill="none"
-                stroke="#facc15"
-                strokeWidth="5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <polyline
-                points="310,240 250,290 230,340"
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="4"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-
-          {/* GROUND LANDSCAPE (Induced positive charge) */}
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-emerald-950 to-slate-900 border-t-4 border-emerald-900/80 flex items-center justify-around px-8">
-            {showInvisibleCharges && (
-              <div className="flex justify-around w-full text-rose-400 font-black text-sm">
-                <span>+</span>
-                <span>+</span>
-                <span>+</span>
-                <span>+</span>
-                <span>+</span>
-                <span>+</span>
-              </div>
-            )}
-            <div className="absolute bottom-2 text-center text-xs font-bold text-emerald-300/80">
-              Earth Surface (Induced Positive Charge Attracts Negative Cloud Base)
-            </div>
-          </div>
-
-          {stormCharge < 0.3 && (
-            <div className="absolute inset-x-0 bottom-28 flex justify-center pointer-events-none">
-              <span className="bg-yellow-400 text-slate-950 px-4 py-1.5 rounded-full font-black text-xs animate-bounce shadow">
-                👉 Click & drag ice particles inside cloud to collide them!
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Professor Zappy & Action */}
-        <div className="relative z-30 flex items-end justify-between">
-          <ProfessorZappy
-            size="md"
-            position="inline"
-            mood={isStriking ? 'surprised' : stormCharge > 0.6 ? 'excited' : 'idle'}
-            staticHairCharge={stormCharge}
+        {/* Top Controls: Invisible World Switch & Reset */}
+        <div className="flex items-center gap-2">
+          <InvisibleWorldToggle
+            active={showInvisibleCharges}
+            onToggle={toggleInvisibleCharges}
           />
 
-          {isCompleted && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowLearningChoice(true)}
-                className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Experiment Menu</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => startLevel('level-6')}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
-              >
-                <span>Next Station →</span>
-              </button>
+          <button
+            type="button"
+            onClick={() => setShowExplanation(true)}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            title="Read Scientific Guide"
+          >
+            <Microscope className="w-4 h-4 text-sky-400" />
+            <span className="hidden sm:inline">Science Guide</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={resetExperiment}
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl comic-border comic-button"
+            title="Reset Experiment"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Atmospheric Thundercloud Arena */}
+      <div className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-slate-900 via-sky-950/40 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px] border-2 border-slate-700 flex flex-col justify-between">
+        {/* Thunderstorm rain & cloud backdrop */}
+        <div className="absolute inset-x-8 top-6 h-56 bg-slate-800/90 rounded-full blur-sm border-2 border-slate-600 shadow-2xl pointer-events-none" />
+
+        {/* Breakdown Potential Gauge HUD */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
+          <div className="bg-slate-950/90 border border-slate-800 p-2.5 rounded-2xl shadow-xl flex flex-col items-end gap-1">
+            <span className="text-[10px] uppercase font-black text-sky-400 tracking-wider">
+              Breakdown Electric Field
+            </span>
+            <div className="w-36 h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+              <div
+                className={`h-full transition-all duration-150 ${
+                  electricField >= 0.85 ? 'bg-rose-500 animate-pulse' : 'bg-yellow-400'
+                }`}
+                style={{ width: `${electricField * 100}%` }}
+              />
             </div>
+            <span className="font-mono text-xs text-yellow-300 font-bold">
+              {(electricField * 3.2).toFixed(1)} MV/m (Max 3.0)
+            </span>
+          </div>
+
+          {/* Thunder delayed rumble indicator */}
+          {isThunderRumbling && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-amber-400 text-slate-950 px-3 py-1 rounded-xl text-xs font-black shadow flex items-center gap-1.5 animate-bounce"
+            >
+              <Volume2 className="w-4 h-4" />
+              <span>BOOOOM! Sonic Shockwave Heard!</span>
+            </motion.div>
           )}
         </div>
-      </motion.div>
+
+        {/* THUNDERCLOUD CUTAWAY CHARGE REGIONS */}
+        <div className="relative z-10 w-full h-64 pointer-events-none">
+          {/* Anvil Top: Positive (+) Ice Region */}
+          <div className="absolute top-2 left-16 right-16 flex items-center justify-between text-[10px] font-black text-rose-400 bg-rose-950/40 px-4 py-1 rounded-full border border-rose-800/40">
+            <span>UPPER ANVIL (+ + + + +)</span>
+            <span>Sub-zero Ice Crystals</span>
+          </div>
+
+          {/* Cloud Base: Negative (−) Graupel Region */}
+          <div className="absolute bottom-2 left-16 right-16 flex items-center justify-between text-[10px] font-black text-sky-400 bg-sky-950/60 px-4 py-1 rounded-full border border-sky-800/40">
+            <span>CLOUD BASE (− − − − −)</span>
+            <span>Heavy Hail & Graupel</span>
+          </div>
+
+          {/* Drifting Collision Particles */}
+          {particles.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                position: 'absolute',
+                left: `${p.x}px`,
+                top: `${p.y}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+              className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shadow transition-transform ${
+                p.type === 'ice'
+                  ? 'bg-rose-500 text-white border border-rose-200'
+                  : 'bg-sky-400 text-slate-950 border border-sky-100'
+              }`}
+            >
+              {p.type === 'ice' ? '+' : '−'}
+            </div>
+          ))}
+        </div>
+
+        {/* GROUND WITH INDUCED POSITIVE CHARGE */}
+        <div className="relative z-10 w-full h-24 bg-gradient-to-t from-emerald-950 to-slate-900 rounded-2xl border-t-2 border-emerald-600/50 flex items-center justify-between px-6 pointer-events-none">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🌲</span>
+            <div>
+              <div className="text-xs font-black text-emerald-400">GROUND SURFACE</div>
+              <div className="text-[10px] text-rose-400 font-bold">
+                Induced Positive (+) Surface Charge
+              </div>
+            </div>
+          </div>
+
+          {/* Lightning rod on roof */}
+          <div className="flex items-center gap-2">
+            <div className="text-3xl">🏠</div>
+            <div className="w-1 h-12 bg-yellow-400 border border-yellow-200 shadow" />
+          </div>
+        </div>
+
+        {/* REALISTIC LIGHTNING BOLT SVG DURING STRIKE */}
+        {isStriking && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
+            <polyline
+              points="400,60 410,130 380,180 430,260 410,340 450,400"
+              fill="none"
+              stroke="#fef08a"
+              strokeWidth="8"
+              strokeLinecap="round"
+            />
+            <polyline
+              points="400,60 410,130 380,180 430,260 410,340 450,400"
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            {/* Stepped leader branches */}
+            <polyline
+              points="410,130 450,160 460,200"
+              fill="none"
+              stroke="#38bdf8"
+              strokeWidth="3"
+            />
+            <polyline
+              points="380,180 340,220 330,250"
+              fill="none"
+              stroke="#38bdf8"
+              strokeWidth="3"
+            />
+          </svg>
+        )}
+
+        {/* UPDRAFT CONTROL INTERACTIVE SLIDER (Bottom Workbench) */}
+        <div className="relative z-20 bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 mt-3">
+          <div className="flex items-center gap-3">
+            <Wind className="w-5 h-5 text-sky-400" />
+            <div>
+              <div className="text-xs font-black text-white">
+                Storm Updraft Velocity
+              </div>
+              <div className="text-[10px] text-slate-400">
+                Faster updraft lifts ice, driving collision charge separation
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <input
+              type="range"
+              min="0"
+              max="50"
+              value={updraftSpeed}
+              onChange={(e) => setUpdraftSpeed(Number(e.target.value))}
+              className="w-full sm:w-48 accent-yellow-400 cursor-pointer"
+            />
+            <span className="font-mono text-xs font-bold text-yellow-300 w-16 text-right">
+              {updraftSpeed} m/s
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setUpdraftSpeed(45)}
+            className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs rounded-xl comic-border-yellow comic-button shadow flex items-center gap-1.5"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Maximum Updraft</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom Professor Zappy & Action Bar */}
+      <div className="relative z-30 flex items-end justify-between">
+        <ProfessorZappy
+          size="md"
+          position="inline"
+          mood={isStriking || isCompleted ? 'celebrating' : 'excited'}
+        />
+
+        {isCompleted && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLearningChoice(true)}
+              className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Case Menu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => startLevel('level-6')}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+            >
+              <span>Next Case →</span>
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* OPTIONAL LEARNING MODAL */}
       <OptionalLearningModal
@@ -440,7 +476,7 @@ export const Level5LightningStorm: React.FC = () => {
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h2 className="text-xl sm:text-2xl font-black text-yellow-300 flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-yellow-400" />
+                  <Microscope className="w-6 h-6 text-yellow-400" />
                   <span>The Science of Storms & Lightning</span>
                 </h2>
                 <button

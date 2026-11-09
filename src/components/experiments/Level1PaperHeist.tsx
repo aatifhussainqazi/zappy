@@ -1,84 +1,101 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { RotateCcw, Info, Sparkles, HelpCircle, ArrowRight } from 'lucide-react';
+import { 
+  RotateCcw, 
+  Info, 
+  Sparkles, 
+  Search, 
+  ArrowRight, 
+  Eye, 
+  Microscope,
+  Zap,
+  CheckCircle2,
+  Trophy
+} from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
-import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
-import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
+import { InvisibleWorldToggle } from '../ui/InvisibleWorldToggle';
 import { OptionalLearningModal } from '../ui/OptionalLearningModal';
+import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
 import { soundManager } from '../../utils/audio';
 
-const TOTAL_PAPERS = 8;
+const TOTAL_PAPERS = 6;
 
-interface PaperPiece {
+type PaperState = 'table' | 'twitching' | 'attached' | 'in_jar';
+
+interface PaperItem {
   id: number;
   initialX: number;
   initialY: number;
   currentX: number;
   currentY: number;
   rotation: number;
-  isAttached: boolean;
-  wiggle: boolean;
+  state: PaperState;
+  color: string;
 }
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
   {
     id: 'opt-polarize',
-    text: 'The paper pieces fly up because the ruler shifts their atomic charges (induced polarization)!',
+    text: 'The paper pieces jump because the ruler shifts their atomic electrons away, inducing a positive charge on the near side!',
     isCorrect: true,
-    feedback: 'Spot on! The negative ruler pushes electrons inside paper atoms away, leaving the positive side closer and strongly attracted!',
+    feedback: 'Spot on! The negative ruler pushes electrons inside paper atoms deeper, leaving the positive surface closer and strongly attracted!',
   },
   {
-    id: 'opt-sparks',
-    text: 'The paper sticks because static electricity creates a sticky chemical glue.',
+    id: 'opt-sticky-air',
+    text: 'Static electricity turns the air between the ruler and desk into a sticky magnetic glue.',
     isCorrect: false,
-    feedback: 'Not glue! It is Coulomb’s electrostatic force between opposite electrical charges acting across empty air!',
+    feedback: 'Not glue! It is Coulomb’s electrostatic force between opposite electrical charges acting across empty air.',
   },
   {
-    id: 'opt-nothing',
-    text: 'Paper has no electrical charges whatsoever.',
+    id: 'opt-empty',
+    text: 'Paper has no electrical charges whatsoever, so it gets pulled by pure gravity.',
     isCorrect: false,
-    feedback: 'All matter has atoms with positive protons and negative electrons! Even neutral paper contains billions of electric charges.',
+    feedback: 'All matter is built of atoms with protons and electrons! Neutral paper contains billions of balanced charges.',
   },
 ];
 
 export const Level1PaperHeist: React.FC = () => {
-  const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges } = useGame();
+  const { setDialogue, completeLevel, startLevel, showInvisibleCharges, toggleInvisibleCharges } = useGame();
 
   const [charge, setCharge] = useState(0); // 0 to 1
-  const [isRubbing, setIsRubbing] = useState(false);
-  const [rulerPos, setRulerPos] = useState({ x: 380, y: 100 });
+  const [rubStrokes, setRubStrokes] = useState(0);
+  const [strokeChallengeActive, setStrokeChallengeActive] = useState(false);
+  const [rulerPos, setRulerPos] = useState({ x: 300, y: 70 });
   const [isDraggingRuler, setIsDraggingRuler] = useState(false);
+  const [isRubbingWool, setIsRubbingWool] = useState(false);
 
-  // Completion & Optional learning modals
+  // Modals & Panels
   const [isCompleted, setIsCompleted] = useState(false);
   const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
-  const [showExplanation, setShowExplanation] = useState(false);
+  const [showAtomCloseUp, setShowAtomCloseUp] = useState(false);
 
   const benchRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPointerPos = useRef<{ x: number; y: number } | null>(null);
+  const lastRubDir = useRef<'up' | 'down' | null>(null);
 
-  // Initialize exact 8 Paper Pieces on the workbench desk
-  const [papers, setPapers] = useState<PaperPiece[]>(() => {
+  // Initialize scattered paper pieces
+  const [papers, setPapers] = useState<PaperItem[]>(() => {
+    const colors = ['#fef08a', '#fed7aa', '#bae6fd', '#e9d5ff', '#bbf7d0', '#fbcfe8'];
     return Array.from({ length: TOTAL_PAPERS }).map((_, i) => ({
       id: i,
-      initialX: 340 + (i % 4) * 55 + Math.random() * 12,
-      initialY: 310 + Math.floor(i / 4) * 45 + Math.random() * 10,
-      currentX: 340 + (i % 4) * 55 + Math.random() * 12,
-      currentY: 310 + Math.floor(i / 4) * 45 + Math.random() * 10,
+      initialX: 300 + (i % 3) * 65 + Math.random() * 20,
+      initialY: 310 + Math.floor(i / 3) * 45 + Math.random() * 12,
+      currentX: 300 + (i % 3) * 65 + Math.random() * 20,
+      currentY: 310 + Math.floor(i / 3) * 45 + Math.random() * 12,
       rotation: Math.random() * 40 - 20,
-      isAttached: false,
-      wiggle: false,
+      state: 'table',
+      color: colors[i % colors.length],
     }));
   });
 
   useEffect(() => {
     setDialogue(
-      "Welcome to Experiment 1: The Paper Heist! Drag the plastic ruler over the wool cloth and rub back and forth to gather electrons!",
+      "Case 01: The Paper Heist! Rub the ruler against the wool cloth to gather negative electrons, pick up the paper, and drop them into the glass jar!",
       'excited'
     );
   }, []);
@@ -104,33 +121,40 @@ export const Level1PaperHeist: React.FC = () => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Constrain ruler strictly inside workbench
-    const newX = Math.max(15, Math.min(rect.width - 200, mouseX - dragOffset.current.x));
-    const newY = Math.max(15, Math.min(rect.height - 70, mouseY - dragOffset.current.y));
+    // Keep ruler safely inside workbench
+    const newX = Math.max(10, Math.min(rect.width - 210, mouseX - dragOffset.current.x));
+    const newY = Math.max(10, Math.min(rect.height - 70, mouseY - dragOffset.current.y));
 
     setRulerPos({ x: newX, y: newY });
 
-    // Wool Cloth zone: left 25px to 270px, top 45px to 280px
-    const rulerCenterX = newX + 95;
-    const rulerCenterY = newY + 27;
-    const isOverWool = rulerCenterX >= 30 && rulerCenterX <= 270 && rulerCenterY >= 50 && rulerCenterY <= 280;
+    // Wool Cloth zone: left 20px to 230px, top 40px to 270px
+    const rulerCenterX = newX + 100;
+    const rulerCenterY = newY + 25;
+    const isOverWool = rulerCenterX >= 25 && rulerCenterX <= 235 && rulerCenterY >= 40 && rulerCenterY <= 275;
 
-    // Friction detection: requires actual pointer movement
+    // Physical Rubbing Detection
     if (isOverWool && lastPointerPos.current) {
-      const dx = e.clientX - lastPointerPos.current.x;
       const dy = e.clientY - lastPointerPos.current.y;
-      const moveDist = Math.hypot(dx, dy);
+      const moveDist = Math.abs(dy);
 
       if (moveDist > 6) {
-        setIsRubbing(true);
+        setIsRubbingWool(true);
+        const currentDir = dy > 0 ? 'down' : 'up';
+
+        // Count a stroke when rubbing direction changes
+        if (lastRubDir.current && lastRubDir.current !== currentDir) {
+          setRubStrokes((s) => s + 1);
+        }
+        lastRubDir.current = currentDir;
+
         setCharge((prev) => {
-          const next = Math.min(1, prev + moveDist * 0.0022);
+          const next = Math.min(1, prev + moveDist * 0.0028);
           soundManager.playRubbing(0.7);
           soundManager.playChargeHum(next);
 
           if (next >= 0.75 && prev < 0.75) {
             setDialogue(
-              "EXCELLENT! The ruler is fully loaded with extra electrons! Now bring it close to the paper pieces!",
+              "EXCELLENT! Ruler is heavily charged with extra electrons! Bring it down near the scattered paper!",
               'excited'
             );
           }
@@ -138,171 +162,206 @@ export const Level1PaperHeist: React.FC = () => {
         });
       }
     } else {
-      setIsRubbing(false);
+      setIsRubbingWool(false);
     }
 
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
 
-    // Paper attraction and attachment (ONLY if ruler is charged >= 0.70)
-    if (charge >= 0.70) {
-      const rulerBottom = newY + 52;
-      const currentRulerCenter = newX + 95;
+    // Glass Jar drop zone: right boundary (approx x: rect.width - 170 to rect.width - 20)
+    const jarLeft = rect.width - 180;
+    const jarTop = rect.height - 210;
+    const isOverJar = rulerCenterX >= jarLeft - 15 && rulerCenterX <= rect.width - 15 && newY <= jarTop + 60;
 
-      setPapers((prevPapers) => {
-        let attachedCount = 0;
+    const rulerBottom = newY + 50;
 
-        const updated = prevPapers.map((paper) => {
-          if (paper.isAttached) {
-            attachedCount++;
-            // Paper moves with ruler
+    // Paper attraction and attachment logic
+    setPapers((prevPapers) => {
+      let newlyAttached = false;
+      let jarCount = 0;
+
+      const updated = prevPapers.map((paper, idx) => {
+        // If already deposited in the jar, it stays settled in the jar bottom
+        if (paper.state === 'in_jar') {
+          jarCount++;
+          return paper;
+        }
+
+        // If attached to ruler, it follows the ruler's movement
+        if (paper.state === 'attached') {
+          // If ruler is positioned directly over jar opening, drop the paper into the jar!
+          if (isOverJar) {
+            soundManager.playPaperFlutter();
+            soundManager.playPop();
+            jarCount++;
             return {
               ...paper,
-              currentX: newX + (paper.id * 21) + 12,
-              currentY: rulerBottom - 10 + (paper.id % 2) * 4,
+              state: 'in_jar' as PaperState,
+              currentX: jarLeft + 25 + (idx % 3) * 28 + Math.random() * 8,
+              currentY: jarTop + 85 + Math.floor(idx / 3) * 25 + Math.random() * 6,
+              rotation: Math.random() * 50 - 25,
             };
           }
 
-          const dist = Math.hypot(paper.initialX - currentRulerCenter, paper.initialY - rulerBottom);
+          // Follow the ruler bottom
+          return {
+            ...paper,
+            currentX: newX + 20 + idx * 26,
+            currentY: rulerBottom - 8 + (idx % 2) * 5,
+          };
+        }
 
-          // Wiggle when getting close
-          if (dist < 140) {
-            // Attach when close enough to ruler bottom
-            if (dist < 80) {
+        // Table paper interaction based on distance and charge
+        if (charge >= 0.65) {
+          const dist = Math.hypot(paper.initialX - rulerCenterX, paper.initialY - rulerBottom);
+
+          if (dist < 130) {
+            // When close enough, paper leaps to the ruler!
+            if (dist < 65) {
               soundManager.playPaperFlutter();
               soundManager.playPop();
-              attachedCount++;
-
+              newlyAttached = true;
               return {
                 ...paper,
-                isAttached: true,
-                currentX: newX + (paper.id * 21) + 12,
-                currentY: rulerBottom - 10,
+                state: 'attached' as PaperState,
+                currentX: newX + 20 + idx * 26,
+                currentY: rulerBottom - 8,
                 rotation: Math.random() * 30 - 15,
-                wiggle: false,
               };
             }
 
+            // Twitching / lifting pre-jump
             return {
               ...paper,
-              wiggle: true,
-              currentY: paper.initialY - (140 - dist) * 0.18,
+              state: 'twitching' as PaperState,
+              currentY: paper.initialY - (130 - dist) * 0.22,
+              rotation: paper.rotation + (Math.random() * 8 - 4),
             };
           }
-
-          return {
-            ...paper,
-            wiggle: false,
-            currentY: paper.initialY,
-          };
-        });
-
-        // Trigger completion when ALL paper pieces have successfully attached!
-        if (attachedCount >= TOTAL_PAPERS && !isCompleted) {
-          setIsCompleted(true);
-          soundManager.playFanfare();
-          completeLevel('level-1', 3, 175);
-
-          confetti({
-            particleCount: 70,
-            spread: 65,
-            origin: { y: 0.6 },
-            colors: ['#0ea5e9', '#facc15', '#ef4444', '#10b981'],
-          });
-
-          setDialogue(
-            "ALL 8 PAPERS COLLECTED! Gravity completely defeated by static charges! Choose what to explore next!",
-            'celebrating'
-          );
-
-          // Open the Optional Learning Panel after paper attachment finishes
-          setTimeout(() => {
-            setShowLearningChoice(true);
-          }, 800);
         }
 
-        return updated;
+        return {
+          ...paper,
+          state: 'table' as PaperState,
+          currentY: paper.initialY,
+        };
       });
-    }
+
+      // Completion check: when all required papers have reached the jar!
+      if (jarCount >= TOTAL_PAPERS && !isCompleted) {
+        setIsCompleted(true);
+        soundManager.playFanfare();
+        completeLevel('level-1', 3, 200);
+
+        confetti({
+          particleCount: 75,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#0ea5e9', '#facc15', '#ef4444', '#10b981'],
+        });
+
+        setDialogue(
+          "MISSION ACCOMPLISHED! All papers safely collected in the jar without physical contact! Choose what to explore next!",
+          'celebrating'
+        );
+
+        setTimeout(() => {
+          setShowLearningChoice(true);
+        }, 700);
+      }
+
+      return updated;
+    });
   };
 
   const handlePointerUp = () => {
     setIsDraggingRuler(false);
-    setIsRubbing(false);
+    setIsRubbingWool(false);
     lastPointerPos.current = null;
   };
 
-  const resetExperiment = () => {
+  const resetExperiment = (fewerStrokesChallenge = false) => {
     soundManager.playClick();
     setCharge(0);
+    setRubStrokes(0);
+    setStrokeChallengeActive(fewerStrokesChallenge);
     setIsDraggingRuler(false);
-    setIsRubbing(false);
+    setIsRubbingWool(false);
     setIsCompleted(false);
     setShowLearningChoice(false);
     setShowPrediction(false);
-    setShowExplanation(false);
-    setRulerPos({ x: 380, y: 100 });
+    setShowAtomCloseUp(false);
+    setRulerPos({ x: 300, y: 70 });
     setPapers((prev) =>
       prev.map((p) => ({
         ...p,
-        isAttached: false,
-        wiggle: false,
+        state: 'table',
         currentX: p.initialX,
         currentY: p.initialY,
       }))
     );
     setDialogue(
-      "Experiment reset! Drag the ruler over to the wool cloth and rub it back and forth to charge it up!",
+      fewerStrokesChallenge
+        ? "CHALLENGE ACTIVE: Collect all paper using the fewest rubbing strokes! Rub with long, deliberate motions!"
+        : "Reset! Pick up the ruler, rub it on the wool cloth, and drop the papers into the jar!",
       'excited'
     );
   };
 
-  const attachedCount = papers.filter((p) => p.isAttached).length;
+  const attachedCount = papers.filter((p) => p.state === 'attached').length;
+  const inJarCount = papers.filter((p) => p.state === 'in_jar').length;
 
   return (
     <div
-      className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
+      className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-3 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      {/* Top Controls Bar */}
+      {/* Top Objective Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg">
+          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg shadow">
             #1
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-black text-white leading-tight">
-              The Paper Heist
-            </h1>
-            <p className="text-xs font-bold text-sky-400">
-              {charge < 0.75
-                ? "Step 1: Rub ruler across the wool cloth until fully charged"
-                : attachedCount < TOTAL_PAPERS
-                ? `Step 2: Bring the charged ruler close to the paper pieces! (${attachedCount}/${TOTAL_PAPERS} Collected)`
-                : "All papers attached! Experiment Complete!"}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-400 bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
+                CASE 01
+              </span>
+              <h1 className="text-base sm:text-lg font-black text-white leading-tight">
+                The Paper Heist
+              </h1>
+            </div>
+            <p className="text-xs font-bold text-amber-300">
+              {charge < 0.7
+                ? "Step 1: Rub ruler on wool cloth to gather negative electrons"
+                : inJarCount < TOTAL_PAPERS
+                ? `Step 2: Attract paper (${attachedCount} attached) and move ruler over the jar to drop them! (${inJarCount}/${TOTAL_PAPERS} in jar)`
+                : "All paper pieces collected into the jar! Case Solved!"}
             </p>
           </div>
         </div>
 
+        {/* Top Controls: Invisible World Switch, Microscope & Reset */}
         <div className="flex items-center gap-2">
-          <ParticleVisualizationToggle
+          <InvisibleWorldToggle
             active={showInvisibleCharges}
             onToggle={toggleInvisibleCharges}
           />
 
           <button
             type="button"
-            onClick={() => setShowExplanation(true)}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            onClick={() => setShowAtomCloseUp(true)}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            title="See Microscopic Atomic View"
           >
-            <Info className="w-4 h-4" />
-            <span className="hidden sm:inline">Science Guide</span>
+            <Microscope className="w-4 h-4 text-sky-400" />
+            <span className="hidden sm:inline">Atom Close-Up</span>
           </button>
 
           <button
             type="button"
-            onClick={resetExperiment}
+            onClick={() => resetExperiment(false)}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl comic-border comic-button"
             title="Reset Experiment"
           >
@@ -311,239 +370,178 @@ export const Level1PaperHeist: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Experiment Workbench */}
+      {/* Main Tabletop Workbench */}
       <div
         ref={benchRef}
-        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-amber-950/20 via-slate-900/90 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]"
+        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-amber-950/25 via-slate-900 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px] border-2 border-slate-700"
       >
-        {/* Table Top Surface Texture */}
-        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-amber-900/30 to-transparent border-t-2 border-amber-700/20 pointer-events-none" />
+        {/* Wood grain desk overlay */}
+        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-amber-900/30 to-transparent border-t-2 border-amber-800/20 pointer-events-none" />
 
-        {/* HUD Overlay: Charge Meter */}
-        <div className="absolute top-4 right-4 z-20">
+        {/* Charge Meter HUD Overlay */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
           <ChargeMeter
             charge={charge}
             polarity="negative"
-            label="Ruler Static Charge"
+            label="Ruler Charge (−)"
             showNeedle={true}
           />
-        </div>
-
-        {/* HUD Particle Legend */}
-        {showInvisibleCharges && (
-          <div className="absolute top-4 left-4 z-20">
-            <ParticleLegend />
+          <div className="bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-700 text-[10px] font-black text-slate-300 flex items-center gap-1.5">
+            <span>Rubbing Strokes:</span>
+            <span className="text-yellow-400 text-xs font-bold">{rubStrokes}</span>
           </div>
-        )}
+        </div>
 
         {/* WOOL CLOTH (Friction Target on Left) */}
-        <div className="absolute left-8 sm:left-14 top-14 w-48 sm:w-56 h-48 sm:h-56 rounded-3xl bg-amber-800/80 border-4 border-amber-600 comic-border-lg p-3 flex flex-col justify-between shadow-xl pointer-events-none">
-          <div className="flex items-center justify-between text-xs font-black uppercase text-amber-200">
-            <span>Wool Cloth</span>
-            <span>🧶</span>
+        <div className="absolute left-6 sm:left-10 top-12 w-48 sm:w-56 h-48 sm:h-56 rounded-3xl bg-gradient-to-br from-amber-800 to-amber-900 border-4 border-amber-600 comic-border-lg p-3 flex flex-col justify-between shadow-xl pointer-events-none">
+          <div className="bg-amber-950/90 text-amber-200 text-center font-black text-xs py-1 px-2 rounded-xl border border-amber-700/60">
+            WOOL CLOTH
           </div>
 
-          <div className="relative w-full h-28 border border-dashed border-amber-500/40 rounded-2xl flex items-center justify-center overflow-hidden">
-            <div className="text-amber-300/60 text-xs font-mono font-bold select-none text-center">
-              DRAG & RUB RULER
-              <br />
-              BACK AND FORTH HERE
-            </div>
-            {isRubbing && (
-              <motion.div
-                animate={{ scale: [1, 1.15, 1], rotate: [0, 8, -8, 0] }}
-                transition={{ repeat: Infinity, duration: 0.2 }}
-                className="absolute inset-0 bg-yellow-400/15 pointer-events-none flex items-center justify-center"
-              >
-                <Sparkles className="w-12 h-12 text-yellow-300 animate-spin" />
-              </motion.div>
-            )}
-          </div>
-
-          <div className="text-[11px] font-bold text-amber-200 text-center">
-            {charge >= 0.75
-              ? '⚡ FULLY CHARGED! Move to Paper!'
-              : `Charge: ${Math.round(charge * 100)}% (Rub to charge)`}
-          </div>
-        </div>
-
-        {/* PAPER PIECES (Neutral Target on Table) */}
-        <div className="absolute inset-0 pointer-events-none">
-          {papers.map((paper) => (
-            <motion.div
-              key={paper.id}
-              className={`absolute select-none pointer-events-none ${
-                paper.wiggle ? 'animate-wiggle' : ''
-              }`}
-              style={{
-                left: paper.currentX,
-                top: paper.currentY,
-                transform: `rotate(${paper.rotation}deg)`,
-              }}
-            >
-              <div
-                className={`w-7 h-5 sm:w-9 sm:h-6 rounded bg-slate-100 border border-slate-400 shadow-md flex items-center justify-center font-bold text-[9px] text-slate-700 transition-colors ${
-                  paper.isAttached ? 'bg-yellow-100 border-yellow-400 ring-2 ring-yellow-300' : ''
-                }`}
-              >
-                {showInvisibleCharges ? (
-                  <div className="flex flex-col items-center justify-between h-full py-0.5 leading-none">
-                    <span className="text-[8px] font-black text-rose-500">+</span >
-                    <span className="text-[8px] font-black text-sky-500">−</span >
-                  </div>
-                ) : (
-                  <span>📄</span>
-                )}
+          {/* Wool fibers & electron donors */}
+          <div className="relative flex-1 flex flex-wrap items-center justify-center p-2 gap-1.5">
+            {showInvisibleCharges && (
+              <div className="text-[10px] font-black text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded-full border border-rose-500/40">
+                Electron Donors (+)
               </div>
-            </motion.div>
-          ))}
+            )}
+            <div className="text-3xl opacity-30">🧶</div>
+          </div>
+
+          <div className="text-[10px] text-amber-300 text-center font-bold">
+            {isRubbingWool ? "Rubbing detected! Transfers electrons!" : "Rub ruler back & forth here"}
+          </div>
         </div>
 
-        {/* DRAGGABLE PLASTIC RULER */}
-        <motion.div
-          className="absolute z-20 cursor-grab active:cursor-grabbing select-none"
+        {/* TRANSPARENT GLASS COLLECTION JAR (Target on Right) */}
+        <div className="absolute right-6 sm:right-10 bottom-6 w-36 sm:w-44 h-52 sm:h-60 rounded-3xl bg-sky-950/30 border-4 border-sky-400/60 backdrop-blur-sm shadow-2xl flex flex-col justify-between p-2 pointer-events-none z-10">
+          <div className="bg-sky-950/80 text-sky-300 text-center font-black text-[10px] py-1 px-1.5 rounded-xl border border-sky-600/40">
+            COLLECTION JAR ({inJarCount}/{TOTAL_PAPERS})
+          </div>
+
+          <div className="text-center text-[10px] font-bold text-sky-200/80">
+            Bring ruler over rim to drop paper!
+          </div>
+        </div>
+
+        {/* SCATTERED PAPER PIECES (Interactive Items) */}
+        {papers.map((paper) => (
+          <motion.div
+            key={paper.id}
+            className={`w-7 sm:w-9 h-7 sm:h-9 rounded-lg border-2 shadow-md flex items-center justify-center font-black text-[10px] cursor-default pointer-events-none z-20 ${
+              paper.state === 'attached'
+                ? 'border-yellow-400 shadow-[0_0_10px_#facc15]'
+                : paper.state === 'in_jar'
+                ? 'border-sky-300 opacity-90'
+                : 'border-amber-300'
+            }`}
+            style={{
+              position: 'absolute',
+              left: `${paper.currentX}px`,
+              top: `${paper.currentY}px`,
+              transform: `rotate(${paper.rotation}deg)`,
+              backgroundColor: paper.color,
+            }}
+          >
+            <span className="text-slate-800">📄</span>
+
+            {/* Microscopic Induced Dipole Overlay in Invisible World View */}
+            {showInvisibleCharges && paper.state !== 'in_jar' && (
+              <div className="absolute -top-3 -bottom-3 inset-x-0 flex flex-col justify-between items-center pointer-events-none text-[8px] font-black">
+                <span className="text-rose-600 bg-white/90 rounded-full px-0.5 shadow leading-none">+</span>
+                <span className="text-sky-600 bg-white/90 rounded-full px-0.5 shadow leading-none">−</span>
+              </div>
+            )}
+          </motion.div>
+        ))}
+
+        {/* THE DRAGGABLE PLASTIC RULER */}
+        <div
           style={{
-            left: rulerPos.x,
-            top: rulerPos.y,
+            position: 'absolute',
+            left: `${rulerPos.x}px`,
+            top: `${rulerPos.y}px`,
+            touchAction: 'none',
           }}
           onPointerDown={handleRulerPointerDown}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          className={`w-48 sm:w-56 h-12 sm:h-14 rounded-2xl cursor-grab active:cursor-grabbing z-30 transition-shadow select-none comic-border ${
+            charge >= 0.75
+              ? 'bg-gradient-to-r from-sky-400 via-sky-300 to-sky-400 shadow-[0_0_24px_rgba(56,189,248,0.7)] border-sky-100'
+              : 'bg-gradient-to-r from-sky-200 to-sky-300 border-sky-400 shadow-xl'
+          }`}
         >
-          <div className="relative">
-            <svg
-              width="190"
-              height="55"
-              viewBox="0 0 190 55"
-              className="drop-shadow-2xl overflow-visible"
-            >
-              <defs>
-                <linearGradient id="rulerGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.85" />
-                  <stop offset="50%" stopColor="#0284c7" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="#0369a1" stopOpacity="0.85" />
-                </linearGradient>
-              </defs>
-
-              {/* Ruler body */}
-              <rect
-                x="2"
-                y="2"
-                width="186"
-                height="50"
-                rx="6"
-                fill="url(#rulerGrad)"
-                stroke="#0f172a"
-                strokeWidth="3.5"
+          {/* Ruler measurement tick lines */}
+          <div className="absolute inset-x-2 top-0 h-2 flex justify-between pointer-events-none">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div
+                key={i}
+                className={`w-0.5 bg-sky-800/60 ${i % 4 === 0 ? 'h-3' : 'h-1.5'}`}
               />
-
-              {/* Measurement Ticks */}
-              {Array.from({ length: 18 }).map((_, i) => (
-                <line
-                  key={i}
-                  x1={12 + i * 9.5}
-                  y1="3"
-                  x2={12 + i * 9.5}
-                  y2={i % 5 === 0 ? 18 : 10}
-                  stroke="#ffffff"
-                  strokeWidth={i % 5 === 0 ? 2 : 1.2}
-                />
-              ))}
-
-              <text
-                x="95"
-                y="38"
-                textAnchor="middle"
-                fill="#ffffff"
-                fontSize="11"
-                fontWeight="900"
-                letterSpacing="1"
-              >
-                STATIC RULER
-              </text>
-
-              {/* Glow when charged */}
-              {charge >= 0.7 && (
-                <rect
-                  x="0"
-                  y="0"
-                  width="190"
-                  height="55"
-                  rx="8"
-                  fill="none"
-                  stroke="#facc15"
-                  strokeWidth="2.5"
-                  className="animate-spark-pulse"
-                />
-              )}
-            </svg>
-
-            {/* Electron negative symbols on ruler surface when charged */}
-            {showInvisibleCharges && charge > 0.1 && (
-              <div className="absolute inset-0 flex items-center justify-around px-3 pointer-events-none">
-                {Array.from({ length: Math.min(8, Math.floor(charge * 9)) }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="w-4 h-4 rounded-full bg-sky-400 text-slate-950 font-black text-[10px] flex items-center justify-center shadow-[0_0_6px_#38bdf8] border border-sky-200 animate-pulse"
-                  >
-                    −
-                  </span>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
-        </motion.div>
 
-        {/* Paper Target Zone Label */}
-        <div className="absolute right-24 sm:right-36 bottom-6 pointer-events-none text-center">
-          <div className="text-xs font-black uppercase tracking-wider text-slate-400 bg-slate-900/80 px-3.5 py-1.5 rounded-full border border-slate-700 shadow flex items-center gap-2">
-            <span>Paper Scraps Target</span>
-            <span className={`px-2 py-0.5 rounded-full text-xs ${attachedCount === TOTAL_PAPERS ? 'bg-emerald-500 text-white font-black' : 'bg-slate-800 text-yellow-300 font-bold'}`}>
-              {attachedCount}/{TOTAL_PAPERS} Attached
+          <div className="h-full flex items-center justify-between px-3 text-slate-900 font-black text-xs pointer-events-none">
+            <span className="truncate">PLASTIC RULER</span>
+            <span className="text-[10px] bg-slate-950/20 px-1.5 py-0.5 rounded font-mono">
+              {Math.round(charge * 100)}%
             </span>
           </div>
+
+          {/* Negative Electron Particles Overlay */}
+          {showInvisibleCharges && charge > 0.08 && (
+            <div className="absolute inset-x-2 bottom-1 flex justify-around pointer-events-none">
+              {Array.from({ length: Math.min(10, Math.floor(charge * 11)) }).map((_, i) => (
+                <span
+                  key={i}
+                  className="w-3.5 h-3.5 rounded-full bg-sky-400 text-slate-950 font-black text-[9px] flex items-center justify-center shadow-[0_0_6px_#38bdf8] border border-sky-200"
+                >
+                  −
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bottom Professor Zappy & Live Action Bar */}
+      {/* Bottom Professor Zappy & Action Bar */}
       <div className="relative z-30 flex items-end justify-between">
         <ProfessorZappy
           size="md"
           position="inline"
-          mood={attachedCount >= TOTAL_PAPERS ? 'celebrating' : isRubbing ? 'surprised' : 'idle'}
-          staticHairCharge={charge}
+          mood={inJarCount >= TOTAL_PAPERS ? 'celebrating' : isRubbingWool ? 'excited' : 'thinking'}
         />
 
-        {/* If completed, show clear quick action pills */}
-        {isCompleted && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowLearningChoice(true)}
-              className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow flex items-center gap-1.5"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Experiment Options</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => startLevel('level-2')}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
-            >
-              <span>Next Station →</span>
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isCompleted && (
+            <>
+              <button
+                type="button"
+                onClick={() => resetExperiment(true)}
+                className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
+              >
+                <Trophy className="w-4 h-4 text-slate-950" />
+                <span>Challenge: Fewer Strokes!</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => startLevel('level-2')}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+              >
+                <span>Next Case →</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* OPTIONAL LEARNING MODAL (Clean prompt to choose what to do next) */}
+      {/* OPTIONAL LEARNING MODAL */}
       <OptionalLearningModal
         isOpen={showLearningChoice}
         levelTitle="The Paper Heist"
         onKeepExperimenting={() => setShowLearningChoice(false)}
         onLearnWhy={() => {
           setShowLearningChoice(false);
-          setShowExplanation(true);
+          setShowAtomCloseUp(true);
         }}
         onTryQuestion={() => {
           setShowLearningChoice(false);
@@ -552,11 +550,11 @@ export const Level1PaperHeist: React.FC = () => {
         onNextLevel={() => startLevel('level-2')}
       />
 
-      {/* OPTIONAL PREDICTION QUESTION (Only shown when explicitly chosen) */}
+      {/* OPTIONAL PREDICTION MODAL */}
       <PredictionModal
         isOpen={showPrediction}
-        question="You watched the paper jump against gravity and stick! What caused the neutral paper to fly up?"
-        subtitle="Test your scientific hypothesis!"
+        question="You watched the paper jump against gravity into the jar! What caused the neutral paper to fly up?"
+        subtitle="Analyze your experimental observation!"
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
@@ -567,9 +565,9 @@ export const Level1PaperHeist: React.FC = () => {
         }}
       />
 
-      {/* SCIENCE EXPLANATION (Only shown when explicitly chosen) */}
+      {/* MICROSCOPIC ATOMIC CLOSE-UP MODAL (The Invisible Science Explained) */}
       <AnimatePresence>
-        {showExplanation && (
+        {showAtomCloseUp && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -579,40 +577,60 @@ export const Level1PaperHeist: React.FC = () => {
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h2 className="text-xl sm:text-2xl font-black text-yellow-300 flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-yellow-400" />
-                  <span>The Science of The Paper Heist</span>
+                  <Microscope className="w-6 h-6 text-sky-400" />
+                  <span>The Invisible Science: Inside the Atom</span>
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setShowExplanation(false)}
+                  onClick={() => setShowAtomCloseUp(false)}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="space-y-3 text-xs sm:text-sm text-slate-200">
-                <p>
-                  <strong>1. Friction transfers electrons:</strong> Rubbing the plastic ruler on the wool cloth caused electrons to move from the wool onto the plastic. The ruler gained extra electrons, becoming <em>negatively charged (−)</em>.
-                </p>
-                <p>
-                  <strong>2. Neutral objects contain balanced charges:</strong> Paper pieces are neutral (equal positive protons and negative electrons), not empty of charges.
-                </p>
-                <p>
-                  <strong>3. Induced Polarization:</strong> When the negative ruler approached, electrons inside the paper atoms were repelled slightly deeper. This left the side of the paper facing the ruler with a <em>relative positive charge</em>!
-                </p>
-                <p>
-                  <strong>4. Attraction overcomes gravity:</strong> Because the closer positive side feels stronger attraction than the farther negative side feels repulsion, the paper leaps upward and clings to the ruler!
-                </p>
+              {/* Visual Diagram of Induced Polarization */}
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex flex-col items-center gap-3">
+                <div className="w-48 h-8 rounded-lg bg-sky-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow">
+                  <span>RULER</span>
+                  <span>(− − − − −)</span>
+                </div>
+
+                <div className="text-sky-400 font-bold text-xs flex items-center gap-1">
+                  <span>↓ Invisible Attraction Force ↓</span>
+                </div>
+
+                <div className="w-44 p-3 rounded-2xl bg-amber-50 text-slate-900 border-2 border-amber-300 flex flex-col items-center gap-1">
+                  <div className="text-[10px] font-black text-rose-600 bg-rose-100 px-2 rounded-full border border-rose-300">
+                    + Clcloser positive atomic cores +
+                  </div>
+                  <div className="text-xs font-black text-slate-700">
+                    NEUTRAL PAPER ATOM
+                  </div>
+                  <div className="text-[10px] font-black text-sky-600 bg-sky-100 px-2 rounded-full border border-sky-300">
+                    − Repelled electrons pushed deeper −
+                  </div>
+                </div>
               </div>
 
-              <div className="p-3 bg-sky-950/80 rounded-xl border border-sky-600 text-xs text-sky-200 font-semibold">
-                💡 <em>Core Law:</em> A neutral object does not need an overall net charge to be attracted—it only needs to rearrange its internal charges!
+              <div className="space-y-3 text-xs sm:text-sm text-slate-200">
+                <p>
+                  <strong>1. Friction transfers electrons:</strong> Rubbing the plastic ruler on the wool cloth stripped loosely bound electrons from the wool onto the plastic. The ruler gained excess electrons (−).
+                </p>
+                <p>
+                  <strong>2. Paper is neutral overall:</strong> The paper never gained or lost total electrons. It contains billions of positive protons and negative electrons.
+                </p>
+                <p>
+                  <strong>3. Induced Surface Polarization:</strong> As the negative ruler approaches, electrons inside the paper atoms are repelled slightly downward. This leaves the near surface with a net positive charge!
+                </p>
+                <p>
+                  <strong>4. Electrostatic attraction wins:</strong> Because opposite charges are closer together than like charges are, the attractive force overcomes gravity and pulls the paper upward!
+                </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setShowExplanation(false)}
+                onClick={() => setShowAtomCloseUp(false)}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
                 Back to Experiment

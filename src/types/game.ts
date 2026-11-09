@@ -13,6 +13,7 @@ export type GameView =
   | 'experiment' 
   | 'sandbox' 
   | 'discovery-book' 
+  | 'notebook'
   | 'settings' 
   | 'wardrobe';
 
@@ -28,11 +29,26 @@ export type ZappyMood =
 export interface LevelInfo {
   id: LevelId;
   number: number;
+  caseNumber: string;
   title: string;
   subtitle: string;
+  mysteryQuestion: string;
   icon: string;
+  environmentName: string;
   description: string;
   concepts: string[];
+}
+
+export interface CaseEvidence {
+  id: string;
+  caseId: LevelId;
+  caseNumber: string;
+  title: string;
+  discovery: string;
+  deepDive: string;
+  icon: string;
+  visualType: 'friction' | 'polarization' | 'repulsion' | 'dipole' | 'storm' | 'safety';
+  unlocked: boolean;
 }
 
 export interface LevelProgress {
@@ -81,6 +97,7 @@ export interface PlayerStats {
   unlockedAccessories: string[];
   currentAccessory: string | null;
   discoveryPages: string[];
+  collectedEvidence: string[];
   achievements: Achievement[];
 }
 

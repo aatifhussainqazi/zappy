@@ -25,6 +25,7 @@ interface GameContextType {
   addXp: (amount: number, reason?: string) => void;
   completeLevel: (levelId: LevelId, stars: number, score: number) => void;
   unlockDiscovery: (pageId: string) => void;
+  collectEvidence: (evidenceId: string) => void;
   unlockAchievement: (achievementId: string) => void;
   setAccessory: (accId: string | null) => void;
   updateSettings: (newSettings: Partial<GameSettings>) => void;
@@ -210,6 +211,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const collectEvidence = (evidenceId: string) => {
+    setStats((prev) => {
+      if (prev.collectedEvidence && prev.collectedEvidence.includes(evidenceId)) return prev;
+      soundManager.playSpark();
+      return {
+        ...prev,
+        collectedEvidence: [...(prev.collectedEvidence || []), evidenceId],
+      };
+    });
+  };
+
   const unlockAchievement = (achievementId: string) => {
     setStats((prev) => {
       const updated = prev.achievements.map((a) => {
@@ -282,6 +294,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addXp,
         completeLevel,
         unlockDiscovery,
+        collectEvidence,
         unlockAchievement,
         setAccessory,
         updateSettings,

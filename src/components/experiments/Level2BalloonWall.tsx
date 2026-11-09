@@ -1,16 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { RotateCcw, Info, ArrowRight, Sparkles, HelpCircle } from 'lucide-react';
+import { 
+  RotateCcw, 
+  Sparkles, 
+  ArrowRight, 
+  Microscope, 
+  Zap, 
+  ShieldAlert,
+  Flame,
+  Search
+} from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
-import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
-import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
+import { InvisibleWorldToggle } from '../ui/InvisibleWorldToggle';
 import { OptionalLearningModal } from '../ui/OptionalLearningModal';
+import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
 import { soundManager } from '../../utils/audio';
 
-type Level2State = 'pick_balloon' | 'rubbing' | 'charged' | 'moving_to_wall' | 'stuck' | 'question' | 'explanation' | 'completed';
+type BalloonWallState = 'pick_balloon' | 'rubbing' | 'charged' | 'stuck';
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
   {
@@ -34,19 +43,19 @@ const PREDICTION_OPTIONS: PredictionOption[] = [
 ];
 
 export const Level2BalloonWall: React.FC = () => {
-  const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges } = useGame();
+  const { setDialogue, completeLevel, startLevel, showInvisibleCharges, toggleInvisibleCharges } = useGame();
 
-  const [gameState, setGameState] = useState<Level2State>('pick_balloon');
   const [charge, setCharge] = useState(0); // 0 to 1
-  const [balloonPos, setBalloonPos] = useState({ x: 240, y: 150 });
+  const [balloonPos, setBalloonPos] = useState({ x: 230, y: 150 });
   const [isDragging, setIsDragging] = useState(false);
   const [isRubbingHair, setIsRubbingHair] = useState(false);
   const [isStuckToWall, setIsStuckToWall] = useState(false);
 
+  // Modals & Panels
+  const [isCompleted, setIsCompleted] = useState(false);
   const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
 
   const benchRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -54,7 +63,7 @@ export const Level2BalloonWall: React.FC = () => {
 
   useEffect(() => {
     setDialogue(
-      "Experiment 2: Balloon vs. Wall! Drag the red balloon and rub it vigorously against Pip's hair to charge it up!",
+      "Case 02: The Wall Defies Gravity! Rub the red balloon against Pip's hair to gather electrons, then bring it near the bedroom wall!",
       'excited'
     );
   }, []);
@@ -70,10 +79,6 @@ export const Level2BalloonWall: React.FC = () => {
     setIsStuckToWall(false);
     dragOffset.current = { x: mouseX - balloonPos.x, y: mouseY - balloonPos.y };
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
-
-    if (gameState === 'pick_balloon') {
-      setDialogue("Now rub the balloon on Pip's hair on the left to pull electrons onto the rubber!", 'thinking');
-    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -83,14 +88,14 @@ export const Level2BalloonWall: React.FC = () => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Constrain safely within workbench boundaries so balloon can NEVER disappear
-    const newX = Math.max(15, Math.min(rect.width - 95, mouseX - dragOffset.current.x));
-    const newY = Math.max(15, Math.min(rect.height - 130, mouseY - dragOffset.current.y));
+    // Constrain safely inside bedroom stage boundaries
+    const newX = Math.max(15, Math.min(rect.width - 100, mouseX - dragOffset.current.x));
+    const newY = Math.max(15, Math.min(rect.height - 140, mouseY - dragOffset.current.y));
 
     setBalloonPos({ x: newX, y: newY });
 
-    // Pip's hair area: left 40px to 260px, bottom area y: 140px to 380px
-    const isOverHair = newX <= 260 && newY >= 120 && newY <= 380;
+    // Pip's hair area: left 30px to 230px, y: 110px to 360px
+    const isOverHair = newX <= 240 && newY >= 100 && newY <= 370;
 
     if (isOverHair && lastPointerPos.current) {
       const dx = e.clientX - lastPointerPos.current.x;
@@ -100,14 +105,13 @@ export const Level2BalloonWall: React.FC = () => {
       if (moveDist > 6) {
         setIsRubbingHair(true);
         setCharge((prev) => {
-          const next = Math.min(1, prev + moveDist * 0.0025);
+          const next = Math.min(1, prev + moveDist * 0.0026);
           soundManager.playRubbing(0.75);
           soundManager.playChargeHum(next);
 
-          if (next >= 0.75 && gameState !== 'charged' && gameState !== 'stuck' && gameState !== 'question') {
-            setGameState('charged');
+          if (next >= 0.75 && prev < 0.75) {
             setDialogue(
-              "EXCELLENT! The balloon is heavily loaded with negative static charge! Now drag it over to the bedroom wall on the right!",
+              "EXCELLENT! Balloon is loaded with negative charge! Drag it over to the bedroom wall on the right!",
               'excited'
             );
           }
@@ -116,6 +120,19 @@ export const Level2BalloonWall: React.FC = () => {
       }
     } else {
       setIsRubbingHair(false);
+    }
+
+    // Grounding Metal Radiator Target at bottom-left: x: 180 to 290, y: rect.height - 100
+    const radX = 230;
+    const radY = rect.height - 110;
+    const distToRadiator = Math.hypot(newX - radX, newY - radY);
+    if (distToRadiator < 50 && charge > 0.05) {
+      soundManager.playSpark();
+      setCharge(0);
+      setDialogue(
+        "ZAP! You touched the metal grounding radiator! Extra electrons escaped safely into the earth, discharging the balloon!",
+        'surprised'
+      );
     }
 
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
@@ -132,46 +149,44 @@ export const Level2BalloonWall: React.FC = () => {
 
     // Check if balloon was released near the wall
     if (balloonPos.x + 80 >= wallLeftEdge - 50) {
-      if (charge >= 0.75) {
-        // Snap and stick to the wall!
-        const stickX = wallLeftEdge - 25;
+      if (charge >= 0.72) {
+        // Snap and cling firmly to the wall against gravity!
+        const stickX = wallLeftEdge - 28;
         setBalloonPos({ x: stickX, y: balloonPos.y });
         setIsStuckToWall(true);
-        setGameState('stuck');
         setIsCompleted(true);
 
         soundManager.playPop();
         soundManager.playSpark();
         soundManager.playFanfare();
-        completeLevel('level-2', 3, 180);
+        completeLevel('level-2', 3, 200);
 
         confetti({
-          particleCount: 70,
+          particleCount: 75,
           spread: 65,
           origin: { y: 0.6 },
           colors: ['#ef4444', '#facc15', '#0ea5e9', '#10b981'],
         });
 
         setDialogue(
-          "IT STICKS! Look at that balloon cling against gravity! The neutral wall has polarized! Choose what to explore next!",
+          "IT STICKS FIRMLY! The neutral drywall surface has polarized! Look at it defy gravity! Choose what to explore next!",
           'celebrating'
         );
 
-        // Offer optional learning panel without interrupting experiment
         setTimeout(() => {
           setShowLearningChoice(true);
         }, 800);
       } else {
-        // Not enough charge to defeat gravity
+        // Not enough static charge to defeat gravity
         soundManager.playWrong();
         setDialogue(
-          "It slid down! Not enough charge yet! Rub the balloon against the hair for longer to gather more electrons!",
+          "It slid down! Uncharged or weakly charged objects can't induce enough surface polarization to hold against gravity! Rub Pip's hair longer!",
           'thinking'
         );
-        // Gently drop balloon toward table but keep it fully visible
+        // Balloon drops downward toward the bedroom floor
         setBalloonPos((prev) => ({
-          x: Math.max(40, prev.x - 60),
-          y: Math.min(rect.height - 140, prev.y + 70),
+          x: Math.max(60, prev.x - 70),
+          y: Math.min(rect.height - 145, prev.y + 90),
         }));
       }
     }
@@ -183,62 +198,71 @@ export const Level2BalloonWall: React.FC = () => {
     setIsStuckToWall(false);
     setIsDragging(false);
     setIsRubbingHair(false);
-    setGameState('pick_balloon');
     setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
-    setBalloonPos({ x: 240, y: 150 });
+    setBalloonPos({ x: 230, y: 150 });
     setDialogue(
-      "Reset! Give Pip's hair another good rub with the balloon to build static charge!",
+      "Reset! Rub the balloon against Pip's hair to pull electrons onto the rubber!",
       'excited'
     );
   };
 
-  // Wall distance for local polarization animation
   const benchWidth = benchRef.current ? benchRef.current.clientWidth : 800;
   const wallLeftEdge = benchWidth - 160;
   const wallDistance = Math.max(0, wallLeftEdge - (balloonPos.x + 80));
-  const wallPolarization = Math.max(0, 1 - wallDistance / 260) * charge;
+  const wallPolarization = Math.max(0, 1 - wallDistance / 240) * charge;
 
   return (
     <div
-      className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
+      className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-3 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      {/* Top Header Controls */}
+      {/* Top Objective Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg">
+          <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg shadow">
             #2
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-black text-white leading-tight">
-              Balloon vs. Wall
-            </h1>
-            <p className="text-xs font-bold text-sky-400">
-              {charge < 0.75
-                ? "Step 1: Rub the balloon on Pip's hair to accumulate negative charge"
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-400 bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
+                CASE 02
+              </span>
+              <h1 className="text-base sm:text-lg font-black text-white leading-tight">
+                The Wall Defies Gravity
+              </h1>
+            </div>
+            <p className="text-xs font-bold text-amber-300">
+              {charge < 0.72
+                ? "Step 1: Rub the balloon on Pip's hair to accumulate negative charge (−)"
+                : isStuckToWall
+                ? "The balloon is sticking! Neutral wall surface atoms are polarized!"
                 : "Step 2: Drag the balloon over to the bedroom wall on the right and release it!"}
             </p>
           </div>
         </div>
 
+        {/* Top Controls: Invisible World Switch & Reset */}
         <div className="flex items-center gap-2">
-          <ParticleVisualizationToggle
+          <InvisibleWorldToggle
             active={showInvisibleCharges}
             onToggle={toggleInvisibleCharges}
           />
+
           <button
             type="button"
             onClick={() => setShowExplanation(true)}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-yellow-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5"
+            title="Read Scientific Guide"
           >
-            <Info className="w-4 h-4" />
+            <Microscope className="w-4 h-4 text-sky-400" />
             <span className="hidden sm:inline">Science Guide</span>
           </button>
+
           <button
             type="button"
             onClick={resetExperiment}
@@ -250,13 +274,16 @@ export const Level2BalloonWall: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Bedroom Scene (Bench) */}
+      {/* Main Bedroom Scene Bench */}
       <div
         ref={benchRef}
-        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-indigo-950/40 via-slate-900/90 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]"
+        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-indigo-950/20 via-slate-900 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px] border-2 border-slate-700"
       >
-        {/* Charge Meter HUD */}
-        <div className="absolute top-4 left-4 z-20">
+        {/* Bedroom Wallpaper and Baseboard */}
+        <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-amber-950/30 to-transparent border-t-2 border-amber-900/30 pointer-events-none" />
+
+        {/* Charge Meter HUD Overlay */}
+        <div className="absolute top-4 left-4 sm:left-auto sm:right-4 z-20">
           <ChargeMeter
             charge={charge}
             polarity="negative"
@@ -265,152 +292,137 @@ export const Level2BalloonWall: React.FC = () => {
           />
         </div>
 
-        {/* Legend */}
-        {showInvisibleCharges && (
-          <div className="absolute top-4 left-64 z-20 hidden md:block">
-            <ParticleLegend />
+        {/* PIP WITH REACTIVE ELECTROSTATIC HAIR (On Left) */}
+        <div className="absolute left-6 sm:left-14 bottom-10 w-44 sm:w-52 h-64 sm:h-72 pointer-events-none z-10 flex flex-col items-center justify-end">
+          {/* Hair Strands standing up with static charge */}
+          <div className="relative w-28 h-20 mb-[-12px] flex justify-center">
+            {[-35, -20, -8, 8, 20, 35].map((angle, i) => (
+              <motion.div
+                key={i}
+                className="w-1.5 h-12 bg-amber-400 rounded-full origin-bottom shadow-sm"
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  transform: `rotate(${angle * (1 + charge * 0.9)}deg) scaleY(${1 + charge * 0.6})`,
+                  transition: 'transform 0.15s ease-out',
+                }}
+              />
+            ))}
           </div>
-        )}
 
-        {/* CHARACTER HEAD WITH FLUFFY HAIR (Pip) on Left */}
-        <div className="absolute left-8 sm:left-20 bottom-10 w-48 h-64 select-none pointer-events-none">
-          <svg width="190" height="240" viewBox="0 0 190 240" className="overflow-visible">
-            {/* Pip's Hair (reacts to balloon charge!) */}
-            <motion.g
-              animate={{
-                scaleY: 1 + charge * (isRubbingHair ? 0.35 : 0.25),
-                skewX: isRubbingHair ? [-4, 4, -4] : 0,
-              }}
-              transition={{ repeat: isRubbingHair ? Infinity : 0, duration: 0.15 }}
-              style={{ transformOrigin: '95px 110px' }}
-            >
-              <circle cx="95" cy="80" r="60" fill="#78350f" stroke="#0f172a" strokeWidth="4" />
-              <circle cx="55" cy="90" r="38" fill="#78350f" stroke="#0f172a" strokeWidth="3" />
-              <circle cx="135" cy="90" r="38" fill="#78350f" stroke="#0f172a" strokeWidth="3" />
-              <circle cx="95" cy="45" r="32" fill="#92400e" stroke="#0f172a" strokeWidth="3" />
+          {/* Pip Cartoon Body */}
+          <div className="w-24 h-24 rounded-full bg-amber-200 border-4 border-amber-400 shadow-md flex flex-col items-center justify-center relative">
+            {/* Eyes */}
+            <div className="flex gap-4 mb-1">
+              <div className="w-3.5 h-4 bg-slate-900 rounded-full flex items-center justify-center">
+                <div className="w-1 h-1 bg-white rounded-full translate-x-0.5 -translate-y-0.5" />
+              </div>
+              <div className="w-3.5 h-4 bg-slate-900 rounded-full flex items-center justify-center">
+                <div className="w-1 h-1 bg-white rounded-full translate-x-0.5 -translate-y-0.5" />
+              </div>
+            </div>
+            {/* Mouth */}
+            <div className="w-4 h-2 border-b-2 border-slate-900 rounded-full" />
+          </div>
 
-              {charge > 0.2 && (
-                <g>
-                  <path d="M50 50 Q40 20 55 10" stroke="#78350f" strokeWidth="4" strokeLinecap="round" />
-                  <path d="M90 40 Q95 10 105 5" stroke="#78350f" strokeWidth="4" strokeLinecap="round" />
-                  <path d="M130 50 Q145 20 140 10" stroke="#78350f" strokeWidth="4" strokeLinecap="round" />
-                  {showInvisibleCharges && (
-                    <>
-                      <circle cx="55" cy="55" r="5" fill="#ef4444" stroke="#0f172a" strokeWidth="1" />
-                      <text x="55" y="57.5" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">+</text>
-                      <circle cx="105" cy="45" r="5" fill="#ef4444" stroke="#0f172a" strokeWidth="1" />
-                      <text x="105" y="47.5" textAnchor="middle" fill="#ffffff" fontSize="7" fontWeight="bold">+</text>
-                    </>
-                  )}
-                </g>
-              )}
-            </motion.g>
-
-            {/* Pip's Face */}
-            <circle cx="95" cy="130" r="48" fill="#fed7aa" stroke="#0f172a" strokeWidth="4" />
-            <circle cx="80" cy="125" r="6" fill="#0f172a" />
-            <circle cx="110" cy="125" r="6" fill="#0f172a" />
-            <circle cx="82" cy="123" r="2" fill="#ffffff" />
-            <circle cx="112" cy="123" r="2" fill="#ffffff" />
-            {charge > 0.5 ? (
-              <ellipse cx="95" cy="150" rx="8" ry="10" fill="#991b1b" stroke="#0f172a" strokeWidth="2.5" />
-            ) : (
-              <path d="M85 145 Q95 155 105 145" fill="none" stroke="#0f172a" strokeWidth="3.5" strokeLinecap="round" />
-            )}
-            <path d="M50 180 C50 170, 140 170, 140 180 L160 240 L30 240 Z" fill="#0284c7" stroke="#0f172a" strokeWidth="4" />
-          </svg>
-
-          <div className="text-center font-black text-xs text-amber-200 mt-1">
-            Pip's Hair (Friction Source)
+          <div className="mt-1 bg-slate-900/90 text-sky-300 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-slate-700">
+            Pip's Hair (Electron Donor)
           </div>
         </div>
 
-        {/* BEDROOM WALL (Target on Right) */}
-        <div className="absolute right-0 top-0 bottom-0 w-36 sm:w-44 bg-amber-900/60 border-l-4 border-amber-600/80 p-3 flex flex-col justify-between shadow-2xl pointer-events-none">
-          <div className="text-xs font-black uppercase text-amber-200 tracking-wider">
-            Bedroom Wall
+        {/* METAL GROUNDING RADIATOR (Grounding Point Target at bottom) */}
+        <div className="absolute left-64 bottom-6 w-28 h-20 rounded-2xl bg-gradient-to-t from-slate-700 to-slate-500 border-2 border-slate-400 p-1.5 shadow-lg flex flex-col justify-between pointer-events-none z-10">
+          <div className="text-[9px] font-black uppercase text-center text-slate-900 bg-slate-300 rounded">
+            Metal Radiator
           </div>
-
-          <div className="relative flex-1 my-2 border border-dashed border-amber-500/30 rounded-2xl p-2 flex flex-col justify-around overflow-hidden">
-            {showInvisibleCharges ? (
-              <div className="space-y-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between px-1">
-                    <motion.div
-                      animate={{ x: wallPolarization > 0.25 ? -6 : 0 }}
-                      className="w-5 h-5 rounded-full bg-rose-500 text-white font-black text-[10px] flex items-center justify-center border border-rose-700 shadow"
-                    >
-                      +
-                    </motion.div>
-                    <motion.div
-                      animate={{ x: wallPolarization > 0.25 ? 12 : 0 }}
-                      className="w-4 h-4 rounded-full bg-sky-500 text-white font-black text-[9px] flex items-center justify-center border border-sky-700 shadow"
-                    >
-                      −
-                    </motion.div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center text-amber-200/50 text-xs font-bold leading-relaxed">
-                BRING CHARGED
-                <br />
-                BALLOON HERE
-                <br />
-                TO STICK!
-              </div>
-            )}
+          <div className="flex justify-around h-9">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="w-1.5 bg-slate-800 rounded-full" />
+            ))}
           </div>
-
-          <div className="text-[10px] font-bold text-center text-amber-300">
-            {isStuckToWall ? '⚡ STUCK BY POLARIZATION!' : 'Neutral Wall Surface'}
+          <div className="text-[8px] text-center text-slate-300 font-bold">
+            Grounding Touch Point
           </div>
         </div>
 
-        {/* DRAGGABLE BALLOON (Always bounded, cannot disappear) */}
+        {/* BEDROOM DRYWALL SECTION (Target on Right) */}
+        <div className="absolute right-0 top-0 bottom-0 w-36 sm:w-44 bg-gradient-to-l from-amber-100 to-amber-50 border-l-4 border-amber-300 shadow-2xl flex flex-col justify-around p-3 pointer-events-none z-10">
+          <div className="text-center font-black text-slate-800 text-xs bg-amber-200/90 py-1 rounded-xl border border-amber-400/60">
+            BEDROOM WALL
+          </div>
+
+          {/* Atomic Induced Surface Polarization Layer in Invisible Mode */}
+          {showInvisibleCharges && (
+            <div className="space-y-4">
+              <div className="text-[9px] font-black text-slate-500 uppercase text-center">
+                Neutral Drywall
+              </div>
+
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between px-2 transition-all duration-200"
+                >
+                  <span
+                    className={`w-5 h-5 rounded-full font-black text-[10px] flex items-center justify-center transition-all ${
+                      wallPolarization > 0.3
+                        ? 'bg-rose-500 text-white shadow-[0_0_8px_#f43f5e] scale-110'
+                        : 'bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    +
+                  </span>
+                  <span
+                    className={`w-5 h-5 rounded-full font-black text-[10px] flex items-center justify-center transition-all ${
+                      wallPolarization > 0.3
+                        ? 'bg-sky-400 text-slate-950 shadow-[0_0_8px_#38bdf8] translate-x-2'
+                        : 'bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    −
+                  </span>
+                </div>
+              ))}
+
+              <div className="text-[8px] font-bold text-center text-rose-700 bg-rose-100 rounded py-0.5">
+                {wallPolarization > 0.3 ? "Surface Polarized!" : "Dipoles Balanced"}
+              </div>
+            </div>
+          )}
+
+          <div className="text-[10px] text-center text-slate-500 font-bold">
+            Release charged balloon near wall to stick!
+          </div>
+        </div>
+
+        {/* DRAGGABLE RUBBER BALLOON */}
         <motion.div
-          className="absolute z-20 cursor-grab active:cursor-grabbing select-none"
           style={{
-            left: balloonPos.x,
-            top: balloonPos.y,
+            position: 'absolute',
+            left: `${balloonPos.x}px`,
+            top: `${balloonPos.y}px`,
+            touchAction: 'none',
           }}
           onPointerDown={handleBalloonPointerDown}
-          animate={
-            isStuckToWall
-              ? { x: [0, 2, 0] }
-              : undefined
-          }
-          transition={{ repeat: Infinity, duration: 2 }}
+          className="w-24 sm:w-28 h-32 sm:h-36 cursor-grab active:cursor-grabbing z-30 select-none flex flex-col items-center"
         >
-          <div className="relative">
-            <svg width="90" height="120" viewBox="0 0 90 120" className="drop-shadow-2xl overflow-visible">
-              <defs>
-                <radialGradient id="balloonWallGrad" cx="35%" cy="35%" r="65%">
-                  <stop offset="0%" stopColor="#f87171" />
-                  <stop offset="65%" stopColor="#dc2626" />
-                  <stop offset="100%" stopColor="#991b1b" />
-                </radialGradient>
-              </defs>
+          {/* Balloon Body */}
+          <div
+            className={`relative w-full h-28 sm:h-32 rounded-[50%_50%_45%_45%] shadow-2xl transition-all border-2 ${
+              charge >= 0.72
+                ? 'bg-gradient-to-br from-rose-500 via-rose-600 to-rose-700 shadow-[0_0_24px_rgba(244,63,94,0.7)] border-rose-200'
+                : 'bg-gradient-to-br from-rose-400 to-rose-600 border-rose-300 shadow-xl'
+            }`}
+          >
+            {/* Rubber highlight shine */}
+            <div className="absolute top-3 left-4 w-5 h-8 bg-white/40 rounded-full rotate-[-25deg] blur-[1px] pointer-events-none" />
 
-              <ellipse cx="45" cy="50" rx="38" ry="46" fill="url(#balloonWallGrad)" stroke="#0f172a" strokeWidth="4" />
-              <ellipse cx="30" cy="32" rx="9" ry="16" fill="#ffffff" opacity="0.45" transform="rotate(-20 30 32)" />
-              <polygon points="41,96 49,96 45,103" fill="#991b1b" stroke="#0f172a" strokeWidth="2.5" />
-              <path d="M45 103 Q38 112 46 120 Q52 128 45 135" fill="none" stroke="#e2e8f0" strokeWidth="2.5" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-black text-xs pointer-events-none">
+              <span>RUBBER</span>
+              <span className="text-sm">🎈</span>
+            </div>
 
-              {charge >= 0.75 && (
-                <ellipse
-                  cx="45"
-                  cy="50"
-                  rx="41"
-                  ry="49"
-                  fill="none"
-                  stroke="#38bdf8"
-                  strokeWidth="2.5"
-                  className="animate-spark-pulse"
-                />
-              )}
-            </svg>
-
+            {/* Negative Electron Charges in Invisible World Mode */}
             {showInvisibleCharges && charge > 0.1 && (
               <div className="absolute inset-0 flex flex-wrap items-center justify-center p-3 gap-1 pointer-events-none">
                 {Array.from({ length: Math.min(10, Math.floor(charge * 11)) }).map((_, i) => (
@@ -424,15 +436,21 @@ export const Level2BalloonWall: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Balloon tie knot & string */}
+          <div className="w-3 h-2 bg-rose-700 rounded-sm" />
+          <svg className="w-6 h-8 overflow-visible">
+            <path d="M 12 0 Q 6 12 12 24" fill="none" stroke="#cbd5e1" strokeWidth="2" />
+          </svg>
         </motion.div>
       </div>
 
-      {/* Bottom Professor Zappy & Action */}
+      {/* Bottom Professor Zappy & Action Bar */}
       <div className="relative z-30 flex items-end justify-between">
         <ProfessorZappy
           size="md"
           position="inline"
-          mood={isStuckToWall ? 'excited' : isRubbingHair ? 'surprised' : 'idle'}
+          mood={isStuckToWall ? 'celebrating' : isRubbingHair ? 'surprised' : 'idle'}
           staticHairCharge={charge}
         />
 
@@ -444,14 +462,14 @@ export const Level2BalloonWall: React.FC = () => {
               className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Experiment Menu</span>
+              <span>Case Menu</span>
             </button>
             <button
               type="button"
               onClick={() => startLevel('level-3')}
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
             >
-              <span>Next Station →</span>
+              <span>Next Case →</span>
             </button>
           </div>
         )}
@@ -460,7 +478,7 @@ export const Level2BalloonWall: React.FC = () => {
       {/* OPTIONAL LEARNING MODAL */}
       <OptionalLearningModal
         isOpen={showLearningChoice}
-        levelTitle="Balloon vs. Wall"
+        levelTitle="The Wall Defies Gravity"
         onKeepExperimenting={() => setShowLearningChoice(false)}
         onLearnWhy={() => {
           setShowLearningChoice(false);
@@ -500,7 +518,7 @@ export const Level2BalloonWall: React.FC = () => {
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h2 className="text-xl sm:text-2xl font-black text-yellow-300 flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-yellow-400" />
+                  <Microscope className="w-6 h-6 text-yellow-400" />
                   <span>The Science of Balloon vs. Wall</span>
                 </h2>
                 <button

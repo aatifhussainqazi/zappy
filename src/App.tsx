@@ -6,6 +6,7 @@ import { WardrobeModal } from './components/ui/WardrobeModal';
 import { LandingPage } from './components/landing/LandingPage';
 import { GameMap } from './components/map/GameMap';
 import { DiscoveryBook } from './components/discovery/DiscoveryBook';
+import { InvestigationNotebook } from './components/discovery/InvestigationNotebook';
 import { Level1PaperHeist } from './components/experiments/Level1PaperHeist';
 import { Level2BalloonWall } from './components/experiments/Level2BalloonWall';
 import { Level3BalloonBumperCars } from './components/experiments/Level3BalloonBumperCars';
@@ -29,6 +30,8 @@ const MainGameContainer: React.FC = () => {
         return <GameMap />;
       case 'discovery-book':
         return <DiscoveryBook />;
+      case 'notebook':
+        return <InvestigationNotebook />;
       case 'sandbox':
         return <FreePlayLab />;
       case 'experiment':

@@ -29,11 +29,13 @@ export const NavBar: React.FC<NavBarProps> = ({ onOpenSettings, onOpenWardrobe }
             <span className="text-2xl drop-shadow">⚡</span>
           </div>
           <div>
-            <span className="text-xl sm:text-2xl font-black tracking-wider text-yellow-300 drop-shadow-[0_2px_0_#0f172a] group-hover:text-yellow-200 transition-colors">
-              STATIC!
-            </span>
-            <span className="hidden md:inline-block ml-2 text-xs font-bold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-full border border-sky-600/50">
-              Science Lab
+            <div className="flex items-center gap-1.5">
+              <span className="text-xl sm:text-2xl font-black tracking-wider text-yellow-300 drop-shadow-[0_2px_0_#0f172a] group-hover:text-yellow-200 transition-colors">
+                STATIC! 2.0
+              </span>
+            </div>
+            <span className="hidden md:inline-block text-[10px] font-black uppercase tracking-wider text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-full border border-sky-600/50">
+              The Invisible Case Files
             </span>
           </div>
         </button>
@@ -51,20 +53,20 @@ export const NavBar: React.FC<NavBarProps> = ({ onOpenSettings, onOpenWardrobe }
           }`}
         >
           <Map className="w-4 h-4 text-sky-400" />
-          <span className="hidden sm:inline">Map</span>
+          <span className="hidden sm:inline">Case Files</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setView('sandbox')}
+          onClick={() => setView('notebook')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm comic-button ${
-            currentView === 'sandbox'
+            currentView === 'notebook'
               ? 'bg-yellow-400 text-slate-950 comic-border-yellow'
-              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 comic-border'
+              : 'bg-slate-800 hover:bg-slate-700 text-yellow-300 comic-border'
           }`}
         >
-          <FlaskConical className="w-4 h-4 text-emerald-400" />
-          <span className="hidden sm:inline">Free Play</span>
+          <Sparkles className="w-4 h-4 text-yellow-400" />
+          <span className="hidden sm:inline">Notebook</span>
         </button>
 
         <button
@@ -78,9 +80,19 @@ export const NavBar: React.FC<NavBarProps> = ({ onOpenSettings, onOpenWardrobe }
         >
           <BookOpen className="w-4 h-4 text-amber-400" />
           <span className="hidden sm:inline">Discovery Book</span>
-          <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full font-black">
-            All Open
-          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setView('sandbox')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm comic-button ${
+            currentView === 'sandbox'
+              ? 'bg-yellow-400 text-slate-950 comic-border-yellow'
+              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 comic-border'
+          }`}
+        >
+          <FlaskConical className="w-4 h-4 text-emerald-400" />
+          <span className="hidden sm:inline">Free Play</span>
         </button>
       </nav>
 
