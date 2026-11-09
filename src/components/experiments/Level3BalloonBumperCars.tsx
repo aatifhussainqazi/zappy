@@ -79,9 +79,9 @@ export const Level3BalloonBumperCars: React.FC = () => {
   });
 
   const [activeDragging, setActiveDragging] = useState<'A' | 'B' | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<'A' | 'B'>('A');
   const [witnessedRepulsion, setWitnessedRepulsion] = useState(false);
   const [witnessedAttraction, setWitnessedAttraction] = useState(false);
-  const [challengeMode, setChallengeMode] = useState(false);
 
   // Modals
   const [isCompleted, setIsCompleted] = useState(false);
@@ -107,7 +107,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
     if (material === 'ground') {
       if (target === 'A') setObjectA((prev) => ({ ...prev, charge: 'neutral' }));
       else setObjectB((prev) => ({ ...prev, charge: 'neutral' }));
-      setDialogue(`Grounded ${target === 'A' ? 'Plastic Rod' : 'Glass Rod'}! Discharged back to neutral.`, 'thinking');
+      setDialogue(`Grounded ${target === 'A' ? 'Plastic Rod A' : 'Glass Rod B'}! Discharged back to neutral.`, 'thinking');
       return;
     }
 
@@ -115,25 +115,26 @@ export const Level3BalloonBumperCars: React.FC = () => {
       // Rubbing with wool transfers electrons onto the object -> negative (−)
       if (target === 'A') {
         setObjectA((prev) => ({ ...prev, charge: 'negative' }));
-        setDialogue("Rubbed with Wool! Loosely-bound electrons jumped onto the Plastic Rod, making it NEGATIVE (−)!", 'excited');
+        setDialogue("Rubbed Plastic Rod A with Wool! Gained electrons, making it NEGATIVE (−)!", 'excited');
       } else {
         setObjectB((prev) => ({ ...prev, charge: 'negative' }));
-        setDialogue("Rubbed with Wool! The rod gained extra electrons, making it NEGATIVE (−)!", 'excited');
+        setDialogue("Rubbed Glass Rod B with Wool! Gained electrons, making it NEGATIVE (−)!", 'excited');
       }
     } else if (material === 'silk') {
-      // Rubbing with silk pulls electrons away from glass -> positive (+)
+      // Rubbing with silk pulls electrons away -> positive (+)
       if (target === 'B') {
         setObjectB((prev) => ({ ...prev, charge: 'positive' }));
-        setDialogue("Rubbed with Silk! Silk pulled electrons away from the Glass Rod, leaving it POSITIVE (+)! ", 'excited');
+        setDialogue("Rubbed Glass Rod B with Silk! Silk pulled electrons away, leaving it POSITIVE (+)! ", 'excited');
       } else {
         setObjectA((prev) => ({ ...prev, charge: 'positive' }));
-        setDialogue("Rubbed with Silk! Lost electrons, leaving it POSITIVE (+)! ", 'excited');
+        setDialogue("Rubbed Plastic Rod A with Silk! Lost electrons, leaving it POSITIVE (+)! ", 'excited');
       }
     }
   };
 
   const handlePointerDown = (id: 'A' | 'B', e: React.PointerEvent) => {
     e.stopPropagation();
+    setSelectedTarget(id);
     if (!benchRef.current) return;
     const rect = benchRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -164,19 +165,19 @@ export const Level3BalloonBumperCars: React.FC = () => {
 
     const currentDist = Math.hypot(targetX - otherObj.x, targetY - otherObj.y);
 
-    if (currentDist < 165 && hasForce) {
+    if (currentDist < 170 && hasForce) {
       if (isRepelling) {
         // Like charges push apart
         const pushAngle = Math.atan2(targetY - otherObj.y, targetX - otherObj.x);
-        targetX = otherObj.x + Math.cos(pushAngle) * 165;
-        targetY = otherObj.y + Math.sin(pushAngle) * 165;
+        targetX = otherObj.x + Math.cos(pushAngle) * 170;
+        targetY = otherObj.y + Math.sin(pushAngle) * 170;
         soundManager.playBoing();
 
         if (!witnessedRepulsion) {
           setWitnessedRepulsion(true);
           setDialogue("BOING! THEY PUSH AWAY! Like charges repel each other! Notice they refuse to touch!", 'surprised');
         }
-      } else if (isAttracting && currentDist < 115) {
+      } else if (isAttracting && currentDist < 155) {
         // Opposite charges pull together
         soundManager.playAttract();
 
@@ -192,8 +193,34 @@ export const Level3BalloonBumperCars: React.FC = () => {
     } else {
       setObjectB((prev) => ({ ...prev, x: targetX, y: targetY }));
     }
+  };
 
-    // Trigger completion sequence once both repulsion and attraction are discovered
+  const handlePointerUp = () => {
+    setActiveDragging(null);
+  };
+
+  // Proximity & Force Detection (fires also when rods are charged while already close)
+  useEffect(() => {
+    const hasForce = objectA.charge !== 'neutral' && objectB.charge !== 'neutral';
+    const isRepelling = hasForce && objectA.charge === objectB.charge;
+    const isAttracting = hasForce && objectA.charge !== objectB.charge;
+    const currentDist = Math.hypot(objectB.x - objectA.x, objectB.y - objectA.y);
+
+    if (currentDist < 170 && hasForce) {
+      if (isRepelling && !witnessedRepulsion) {
+        setWitnessedRepulsion(true);
+        soundManager.playBoing();
+        setDialogue("BOING! THEY PUSH AWAY! Like charges repel each other! Notice they refuse to touch!", 'surprised');
+      } else if (isAttracting && currentDist < 155 && !witnessedAttraction) {
+        setWitnessedAttraction(true);
+        soundManager.playAttract();
+        setDialogue("ATTRACT! Look at them pull together! Opposite charges attract across empty space!", 'celebrating');
+      }
+    }
+  }, [objectA.x, objectA.y, objectA.charge, objectB.x, objectB.y, objectB.charge, witnessedRepulsion, witnessedAttraction, setDialogue]);
+
+  // Reliable Completion Trigger: Runs immediately when both required objectives are satisfied
+  useEffect(() => {
     if (witnessedRepulsion && witnessedAttraction && !isCompleted) {
       setIsCompleted(true);
       soundManager.playFanfare();
@@ -211,20 +238,19 @@ export const Level3BalloonBumperCars: React.FC = () => {
         'celebrating'
       );
 
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setShowLearningChoice(true);
       }, 700);
-    }
-  };
 
-  const handlePointerUp = () => {
-    setActiveDragging(null);
-  };
+      return () => clearTimeout(timer);
+    }
+  }, [witnessedRepulsion, witnessedAttraction, isCompleted, completeLevel, setDialogue]);
 
   const resetExperiment = () => {
     soundManager.playClick();
     setObjectA((prev) => ({ ...prev, charge: 'neutral', x: 230, y: 160 }));
     setObjectB((prev) => ({ ...prev, charge: 'neutral', x: 520, y: 160 }));
+    setSelectedTarget('A');
     setWitnessedRepulsion(false);
     setWitnessedAttraction(false);
     setShowLearningChoice(false);
@@ -270,7 +296,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
                 ? "Step 1: Charge both rods with Wool (−) and bring them close to test repulsion"
                 : !witnessedAttraction
                 ? "Step 2: Charge one rod with Silk (+) and bring them close to test attraction"
-                : "Both laws discovered: Likes Repel & Opposites Attract!"}
+                : "Both laws discovered: Likes Repel & Opposites Attract! Case Complete!"}
             </p>
           </div>
         </div>
@@ -385,7 +411,9 @@ export const Level3BalloonBumperCars: React.FC = () => {
             touchAction: 'none',
           }}
           onPointerDown={(e) => handlePointerDown('A', e)}
-          className="w-20 sm:w-24 h-28 sm:h-32 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center select-none"
+          className={`w-20 sm:w-24 h-28 sm:h-32 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center select-none rounded-2xl transition-all ${
+            selectedTarget === 'A' ? 'ring-4 ring-yellow-400/90 shadow-[0_0_16px_#facc15]' : ''
+          }`}
         >
           <div
             className={`w-full h-24 rounded-2xl border-2 shadow-xl flex flex-col items-center justify-center p-1 transition-all ${
@@ -397,7 +425,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
             }`}
           >
             <span className="text-[10px] font-black uppercase text-center leading-tight">
-              Plastic
+              Plastic Rod A
             </span>
             <span className="text-xl my-1">
               {objectA.charge === 'negative' ? '⚡' : objectA.charge === 'positive' ? '✨' : '⚪'}
@@ -407,7 +435,9 @@ export const Level3BalloonBumperCars: React.FC = () => {
             </span>
           </div>
 
-          <span className="text-[9px] font-bold text-slate-400 mt-1">Object A</span>
+          <span className="text-[9px] font-bold text-slate-400 mt-1">
+            {selectedTarget === 'A' ? 'Active Target' : 'Object A'}
+          </span>
         </div>
 
         {/* SUSPENDED OBJECT B (Glass Rod on Right) */}
@@ -419,7 +449,9 @@ export const Level3BalloonBumperCars: React.FC = () => {
             touchAction: 'none',
           }}
           onPointerDown={(e) => handlePointerDown('B', e)}
-          className="w-20 sm:w-24 h-28 sm:h-32 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center select-none"
+          className={`w-20 sm:w-24 h-28 sm:h-32 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center select-none rounded-2xl transition-all ${
+            selectedTarget === 'B' ? 'ring-4 ring-yellow-400/90 shadow-[0_0_16px_#facc15]' : ''
+          }`}
         >
           <div
             className={`w-full h-24 rounded-2xl border-2 shadow-xl flex flex-col items-center justify-center p-1 transition-all ${
@@ -431,7 +463,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
             }`}
           >
             <span className="text-[10px] font-black uppercase text-center leading-tight">
-              Glass
+              Glass Rod B
             </span>
             <span className="text-xl my-1">
               {objectB.charge === 'negative' ? '⚡' : objectB.charge === 'positive' ? '✨' : '⚪'}
@@ -441,21 +473,47 @@ export const Level3BalloonBumperCars: React.FC = () => {
             </span>
           </div>
 
-          <span className="text-[9px] font-bold text-slate-400 mt-1">Object B</span>
+          <span className="text-[9px] font-bold text-slate-400 mt-1">
+            {selectedTarget === 'B' ? 'Active Target' : 'Object B'}
+          </span>
         </div>
 
-        {/* PHYSICAL CHARGING STATION WORKBENCH (Bottom Trays) */}
-        <div className="absolute inset-x-4 bottom-4 flex flex-wrap items-center justify-between gap-3 z-20 bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
-          <div className="text-[10px] font-black uppercase text-slate-400">
-            Triboelectric Charging Materials:
+        {/* PHYSICAL CHARGING STATION WORKBENCH (Bottom Trays with Target Selection) */}
+        <div className="absolute inset-x-4 bottom-4 flex flex-wrap items-center justify-between gap-3 z-20 bg-slate-950/90 p-3 rounded-2xl border-2 border-slate-700">
+          {/* Target Rod Selector Buttons */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase text-slate-400">Target Rod:</span>
+            <button
+              type="button"
+              onClick={() => setSelectedTarget('A')}
+              className={`px-3 py-1 rounded-xl text-xs font-black transition-all ${
+                selectedTarget === 'A'
+                  ? 'bg-yellow-400 text-slate-950 comic-border-yellow shadow-md'
+                  : 'bg-slate-800 text-slate-300 hover:text-white'
+              }`}
+            >
+              Plastic Rod A ({objectA.charge === 'negative' ? '−' : objectA.charge === 'positive' ? '+' : '0'})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTarget('B')}
+              className={`px-3 py-1 rounded-xl text-xs font-black transition-all ${
+                selectedTarget === 'B'
+                  ? 'bg-yellow-400 text-slate-950 comic-border-yellow shadow-md'
+                  : 'bg-slate-800 text-slate-300 hover:text-white'
+              }`}
+            >
+              Glass Rod B ({objectB.charge === 'negative' ? '−' : objectB.charge === 'positive' ? '+' : '0'})
+            </button>
           </div>
 
+          {/* Charging Material Swatches */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Wool Swatch (Transfers electrons -> makes negative) */}
             <button
               type="button"
-              onClick={() => chargeObjectWithMaterial(activeDragging || 'A', 'wool')}
-              className="px-3 py-1.5 bg-amber-800 hover:bg-amber-700 text-amber-200 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5 shadow"
+              onClick={() => chargeObjectWithMaterial(selectedTarget, 'wool')}
+              className="px-3 py-1.5 bg-amber-800 hover:bg-amber-700 text-amber-200 font-black text-xs rounded-xl comic-border comic-button flex items-center gap-1.5 shadow"
             >
               <span>🧶 Rub with Wool (−)</span>
             </button>
@@ -463,8 +521,8 @@ export const Level3BalloonBumperCars: React.FC = () => {
             {/* Silk Cloth (Pulls electrons -> makes positive) */}
             <button
               type="button"
-              onClick={() => chargeObjectWithMaterial(activeDragging || 'B', 'silk')}
-              className="px-3 py-1.5 bg-pink-900 hover:bg-pink-800 text-pink-200 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5 shadow"
+              onClick={() => chargeObjectWithMaterial(selectedTarget, 'silk')}
+              className="px-3 py-1.5 bg-pink-900 hover:bg-pink-800 text-pink-200 font-black text-xs rounded-xl comic-border comic-button flex items-center gap-1.5 shadow"
             >
               <span>🎀 Rub with Silk (+)</span>
             </button>
@@ -472,8 +530,8 @@ export const Level3BalloonBumperCars: React.FC = () => {
             {/* Grounding Pad (Discharges to neutral) */}
             <button
               type="button"
-              onClick={() => chargeObjectWithMaterial(activeDragging || 'A', 'ground')}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl comic-border comic-button flex items-center gap-1.5 shadow"
+              onClick={() => chargeObjectWithMaterial(selectedTarget, 'ground')}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-xs rounded-xl comic-border comic-button flex items-center gap-1.5 shadow"
             >
               <span>⏚ Ground (0)</span>
             </button>
