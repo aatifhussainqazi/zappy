@@ -1,55 +1,56 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, Info, ArrowRight, Sparkles, Heart, Zap, ArrowLeftRight } from 'lucide-react';
+import { RotateCcw, Info, ArrowRight, Sparkles, Zap } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
-import { PredictionModal, PredictionOption } from '../ui/PredictionModal';
+import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
 import { LevelCompleteModal } from '../ui/LevelCompleteModal';
 import { soundManager } from '../../utils/audio';
 
 type ChargeType = 'negative' | 'positive' | 'neutral';
+type Level3State = 'experimenting' | 'discovered' | 'question' | 'explanation' | 'completed';
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
   {
     id: 'opt-push',
-    text: 'Both balloons will push apart and bounce away like bumper cars!',
+    text: 'Like charges repel and push apart; opposite charges attract and pull together!',
     isCorrect: true,
-    feedback: 'Exactly right! Two negative charges repel each other with an invisible electrostatic force field!',
+    feedback: 'Exactly right! Negative and negative repel, positive and positive repel, while positive and negative attract!',
   },
   {
-    id: 'opt-merge',
-    text: 'They will merge together into one mega giant balloon.',
+    id: 'opt-random',
+    text: 'Electric charges attract or repel completely at random.',
     isCorrect: false,
-    feedback: 'Haha! Balloon rubber is tough—they won’t merge, they will violently push each other away!',
+    feedback: 'Not random at all! The electrostatic law is universal: likes always repel, and opposites always attract.',
   },
   {
-    id: 'opt-stick',
-    text: 'They will stick together like magnetic glue.',
+    id: 'opt-always-stick',
+    text: 'All charged objects always stick together regardless of charge type.',
     isCorrect: false,
-    feedback: 'Careful! Like charges repel each other! Only OPPOSITE charges pull together.',
+    feedback: 'Careful! If charges are the same type, their electric fields push each other away like bumper cars!',
   },
 ];
 
 export const Level3BalloonBumperCars: React.FC = () => {
   const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges } = useGame();
 
-  // Balloon A & Balloon B states
+  const [gameState, setGameState] = useState<Level3State>('experimenting');
   const [chargeA, setChargeA] = useState<ChargeType>('negative');
   const [chargeB, setChargeB] = useState<ChargeType>('negative');
-  const [balloonAPos, setBalloonAPos] = useState({ x: 260, y: 180 });
-  const [balloonBPos, setBalloonBPos] = useState({ x: 520, y: 180 });
+  const [balloonAPos, setBalloonAPos] = useState({ x: 220, y: 150 });
+  const [balloonBPos, setBalloonBPos] = useState({ x: 500, y: 150 });
   const [activeDragging, setActiveDragging] = useState<'A' | 'B' | null>(null);
 
   const [discoveredRepulsion, setDiscoveredRepulsion] = useState(false);
   const [discoveredAttraction, setDiscoveredAttraction] = useState(false);
 
   const [showPrediction, setShowPrediction] = useState(false);
-  const [hasPredicted, setHasPredicted] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const benchRef = useRef<HTMLDivElement>(null);
+  const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
     setDialogue(
@@ -58,12 +59,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
     );
   }, []);
 
-  // Distance between balloons
-  const dx = balloonBPos.x - balloonAPos.x;
-  const dy = balloonBPos.y - balloonAPos.y;
-  const distance = Math.hypot(dx, dy) || 1;
-
-  // Determine force interaction
   const isRepelling =
     (chargeA === 'negative' && chargeB === 'negative') ||
     (chargeA === 'positive' && chargeB === 'positive');
@@ -72,21 +67,35 @@ export const Level3BalloonBumperCars: React.FC = () => {
     (chargeA === 'negative' && chargeB === 'positive') ||
     (chargeA === 'positive' && chargeB === 'negative');
 
+  const handlePointerDown = (balloon: 'A' | 'B', e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (!benchRef.current) return;
+    const rect = benchRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    setActiveDragging(balloon);
+    const targetPos = balloon === 'A' ? balloonAPos : balloonBPos;
+    dragOffset.current = { x: mouseX - targetPos.x, y: mouseY - targetPos.y };
+  };
+
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!activeDragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = Math.max(50, Math.min(rect.width - 120, e.clientX - rect.left - 45));
-    const mouseY = Math.max(80, Math.min(rect.height - 120, e.clientY - rect.top - 50));
+    if (!activeDragging || !benchRef.current) return;
+    const rect = benchRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const boundedX = Math.max(20, Math.min(rect.width - 110, mouseX - dragOffset.current.x));
+    const boundedY = Math.max(20, Math.min(rect.height - 130, mouseY - dragOffset.current.y));
 
     if (activeDragging === 'A') {
-      let targetX = mouseX;
-      let targetY = mouseY;
+      let targetX = boundedX;
+      let targetY = boundedY;
 
-      // Physics force reaction against Balloon B
+      // Force interaction with Balloon B
       const currentDist = Math.hypot(balloonBPos.x - targetX, balloonBPos.y - targetY);
       if (currentDist < 160) {
         if (isRepelling) {
-          // Repulsion force pushback!
           const pushAngle = Math.atan2(targetY - balloonBPos.y, targetX - balloonBPos.x);
           targetX = balloonBPos.x + Math.cos(pushAngle) * 160;
           targetY = balloonBPos.y + Math.sin(pushAngle) * 160;
@@ -94,21 +103,21 @@ export const Level3BalloonBumperCars: React.FC = () => {
 
           if (!discoveredRepulsion) {
             setDiscoveredRepulsion(true);
-            setDialogue("BOING! LIKE CHARGES REPEL! They simply refuse to touch!", 'surprised');
+            setDialogue("BOING! LIKE CHARGES REPEL! They refuse to touch! Now try switching one balloon to Positive (+)", 'surprised');
           }
         } else if (isAttracting && currentDist < 120) {
           soundManager.playAttract();
           if (!discoveredAttraction) {
             setDiscoveredAttraction(true);
-            setDialogue("OPPOSITES ATTRACT! Look at them hug together!", 'celebrating');
+            setDialogue("OPPOSITES ATTRACT! Look at them hug together! An invisible magnetic-like pull!", 'celebrating');
           }
         }
       }
 
       setBalloonAPos({ x: targetX, y: targetY });
     } else if (activeDragging === 'B') {
-      let targetX = mouseX;
-      let targetY = mouseY;
+      let targetX = boundedX;
+      let targetY = boundedY;
 
       const currentDist = Math.hypot(targetX - balloonAPos.x, targetY - balloonAPos.y);
       if (currentDist < 160) {
@@ -120,7 +129,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
 
           if (!discoveredRepulsion) {
             setDiscoveredRepulsion(true);
-            setDialogue("BOING! LIKE CHARGES REPEL! An invisible bumper cushion!", 'surprised');
+            setDialogue("BOING! LIKE CHARGES REPEL! An invisible bumper cushion! Now switch one to Positive (+)", 'surprised');
           }
         } else if (isAttracting && currentDist < 120) {
           soundManager.playAttract();
@@ -134,9 +143,13 @@ export const Level3BalloonBumperCars: React.FC = () => {
       setBalloonBPos({ x: targetX, y: targetY });
     }
 
-    // Trigger complete when player has experienced both
-    if (discoveredRepulsion && discoveredAttraction && !isCompleted) {
-      setIsCompleted(true);
+    // Trigger completion sequence only after player has witnessed both repulsion and attraction
+    if (discoveredRepulsion && discoveredAttraction && gameState === 'experimenting') {
+      setGameState('discovered');
+      setTimeout(() => {
+        setShowPrediction(true);
+        setGameState('question');
+      }, 1500);
     }
   };
 
@@ -148,20 +161,27 @@ export const Level3BalloonBumperCars: React.FC = () => {
     soundManager.playClick();
     setChargeA('negative');
     setChargeB('negative');
-    setBalloonAPos({ x: 260, y: 180 });
-    setBalloonBPos({ x: 520, y: 180 });
-    setDialogue("Reset! Try toggling Balloon B's charge to Positive to see attraction!", 'excited');
+    setBalloonAPos({ x: 220, y: 150 });
+    setBalloonBPos({ x: 500, y: 150 });
+    setDiscoveredRepulsion(false);
+    setDiscoveredAttraction(false);
+    setGameState('experimenting');
+    setShowPrediction(false);
+    setShowExplanation(false);
+    setIsCompleted(false);
+    setDialogue("Reset! Push the two negative balloons together, then switch one polarity to test both laws!", 'excited');
   };
+
+  const distBetween = Math.hypot(balloonBPos.x - balloonAPos.x, balloonBPos.y - balloonAPos.y) || 1;
 
   return (
     <div
-      ref={containerRef}
       className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      {/* Header Bar */}
+      {/* Top Header Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg">
@@ -172,7 +192,11 @@ export const Level3BalloonBumperCars: React.FC = () => {
               Balloon Bumper Cars
             </h1>
             <p className="text-xs font-bold text-sky-400">
-              Objective: Test attraction & repulsion between positive and negative charges!
+              {!discoveredRepulsion
+                ? "Step 1: Push the two negative balloons together to feel repulsion!"
+                : !discoveredAttraction
+                ? "Step 2: Switch one balloon to Positive (+) and bring them together!"
+                : "Both laws discovered!"}
             </p>
           </div>
         </div>
@@ -201,9 +225,12 @@ export const Level3BalloonBumperCars: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Arena */}
-      <div className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-purple-950/30 via-slate-900/90 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]">
-        {/* Arena Top Banners: The Golden Laws of Electrostatics */}
+      {/* Main Arena Bench */}
+      <div
+        ref={benchRef}
+        className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-purple-950/30 via-slate-900/90 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]"
+      >
+        {/* Arena Top Banners */}
         <div className="absolute top-4 inset-x-8 flex justify-center z-20 pointer-events-none">
           <div className="bg-slate-900/90 border-2 border-slate-700 px-4 py-2 rounded-2xl shadow-xl flex items-center gap-4 text-xs font-black">
             <span className={chargeA === chargeB ? 'text-yellow-400' : 'text-slate-500'}>
@@ -216,16 +243,14 @@ export const Level3BalloonBumperCars: React.FC = () => {
           </div>
         </div>
 
-        {/* Strings suspended from ceiling */}
+        {/* Strings from ceiling */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
-          <line x1="305" y1="0" x2={balloonAPos.x + 45} y2={balloonAPos.y} stroke="#94a3b8" strokeWidth="2.5" strokeDasharray="4 4" />
-          <line x1="565" y1="0" x2={balloonBPos.x + 45} y2={balloonBPos.y} stroke="#94a3b8" strokeWidth="2.5" strokeDasharray="4 4" />
+          <line x1="265" y1="0" x2={balloonAPos.x + 45} y2={balloonAPos.y} stroke="#94a3b8" strokeWidth="2.5" strokeDasharray="4 4" />
+          <line x1="545" y1="0" x2={balloonBPos.x + 45} y2={balloonBPos.y} stroke="#94a3b8" strokeWidth="2.5" strokeDasharray="4 4" />
 
-          {/* Force Lines between Balloons */}
-          {distance < 240 && (
+          {distBetween < 220 && (
             <g>
               {isRepelling ? (
-                /* Repulsion Shockwave Curves */
                 <circle
                   cx={(balloonAPos.x + balloonBPos.x) / 2 + 45}
                   cy={(balloonAPos.y + balloonBPos.y) / 2 + 50}
@@ -237,7 +262,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
                   className="animate-spin"
                 />
               ) : (
-                /* Attraction Magnetic Flow Lines */
                 <line
                   x1={balloonAPos.x + 45}
                   y1={balloonAPos.y + 50}
@@ -252,17 +276,13 @@ export const Level3BalloonBumperCars: React.FC = () => {
           )}
         </svg>
 
-        {/* BALLOON A (Left) */}
+        {/* BALLOON A */}
         <div
           className="absolute z-20 cursor-grab active:cursor-grabbing select-none"
           style={{ left: balloonAPos.x, top: balloonAPos.y }}
-          onPointerDown={() => {
-            setActiveDragging('A');
-            if (!hasPredicted && !showPrediction) setShowPrediction(true);
-          }}
+          onPointerDown={(e) => handlePointerDown('A', e)}
         >
           <div className="relative flex flex-col items-center">
-            {/* Balloon SVG */}
             <svg width="90" height="110" viewBox="0 0 90 110" className="drop-shadow-2xl">
               <ellipse
                 cx="45"
@@ -277,7 +297,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
               <polygon points="41,88 49,88 45,95" fill="#0f172a" />
             </svg>
 
-            {/* Charge Badge */}
             <span
               className={`-mt-1 px-2.5 py-0.5 rounded-full font-black text-xs comic-border shadow ${
                 chargeA === 'positive' ? 'bg-rose-500 text-white' : 'bg-sky-500 text-white'
@@ -286,7 +305,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
               {chargeA === 'positive' ? 'POSITIVE (+)' : 'NEGATIVE (−)'}
             </span>
 
-            {/* Polarity Switcher for A */}
             <button
               type="button"
               onClick={(e) => {
@@ -294,24 +312,20 @@ export const Level3BalloonBumperCars: React.FC = () => {
                 soundManager.playClick();
                 setChargeA((c) => (c === 'negative' ? 'positive' : 'negative'));
               }}
-              className="mt-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-yellow-300 rounded-lg border border-slate-700"
+              className="mt-2 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-yellow-300 rounded-lg border border-slate-700 comic-button"
             >
-              Switch Polarity
+              Toggle (+ / −)
             </button>
           </div>
         </div>
 
-        {/* BALLOON B (Right) */}
+        {/* BALLOON B */}
         <div
           className="absolute z-20 cursor-grab active:cursor-grabbing select-none"
           style={{ left: balloonBPos.x, top: balloonBPos.y }}
-          onPointerDown={() => {
-            setActiveDragging('B');
-            if (!hasPredicted && !showPrediction) setShowPrediction(true);
-          }}
+          onPointerDown={(e) => handlePointerDown('B', e)}
         >
           <div className="relative flex flex-col items-center">
-            {/* Balloon SVG */}
             <svg width="90" height="110" viewBox="0 0 90 110" className="drop-shadow-2xl">
               <ellipse
                 cx="45"
@@ -326,7 +340,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
               <polygon points="41,88 49,88 45,95" fill="#0f172a" />
             </svg>
 
-            {/* Charge Badge */}
             <span
               className={`-mt-1 px-2.5 py-0.5 rounded-full font-black text-xs comic-border shadow ${
                 chargeB === 'positive' ? 'bg-rose-500 text-white' : 'bg-sky-500 text-white'
@@ -335,7 +348,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
               {chargeB === 'positive' ? 'POSITIVE (+)' : 'NEGATIVE (−)'}
             </span>
 
-            {/* Polarity Switcher for B */}
             <button
               type="button"
               onClick={(e) => {
@@ -343,24 +355,22 @@ export const Level3BalloonBumperCars: React.FC = () => {
                 soundManager.playClick();
                 setChargeB((c) => (c === 'negative' ? 'positive' : 'negative'));
               }}
-              className="mt-2 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-yellow-300 rounded-lg border border-slate-700"
+              className="mt-2 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-yellow-300 rounded-lg border border-slate-700 comic-button"
             >
-              Switch Polarity
+              Toggle (+ / −)
             </button>
           </div>
         </div>
 
-        {/* Interaction Status Banner */}
+        {/* Status banner */}
         <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none">
-          <div className="bg-slate-950/80 border border-slate-700 px-4 py-2 rounded-2xl flex items-center gap-3">
+          <div className="bg-slate-950/80 border border-slate-700 px-4 py-2 rounded-2xl flex items-center gap-3 shadow-lg">
             <span className="text-xs font-black uppercase text-slate-300">
-              Interaction Status:
+              Current Physics State:
             </span>
             <span
               className={`text-xs font-black uppercase px-2.5 py-0.5 rounded-lg ${
-                isRepelling
-                  ? 'bg-rose-600 text-white'
-                  : 'bg-emerald-600 text-white'
+                isRepelling ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
               }`}
             >
               {isRepelling ? '🚫 Like Charges Repelling' : '❤️ Opposite Charges Attracting'}
@@ -377,34 +387,35 @@ export const Level3BalloonBumperCars: React.FC = () => {
           mood={discoveredAttraction && discoveredRepulsion ? 'celebrating' : 'excited'}
         />
 
-        {isCompleted && (
+        {gameState === 'completed' && (
           <button
             type="button"
             onClick={() => completeLevel('level-3', 3, 120)}
             className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
           >
-            <span>Proceed to Victory Screen!</span>
+            <span>Proceed to Next Experiment!</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         )}
       </div>
 
-      {/* PREDICTION MODAL */}
+      {/* PREDICTION MODAL (Appears ONLY after observing repulsion & attraction) */}
       <PredictionModal
         isOpen={showPrediction}
-        question="Both balloons have gained negative charges (−). What will happen when you push them close?"
+        question="You tested both charge configurations! What is the fundamental rule governing electric charges?"
+        subtitle="Analyze your experimental observations!"
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setHasPredicted(true);
-          setDialogue("Brilliant! Now try to force them together and feel the invisible bumper car effect!", 'excited');
+          setShowExplanation(true);
+          setDialogue("ABSOLUTELY RIGHT! Like charges repel each other, and opposite charges attract!", 'celebrating');
         }}
       />
 
       {/* SCIENCE EXPLANATION */}
       <AnimatePresence>
         {showExplanation && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -418,7 +429,13 @@ export const Level3BalloonBumperCars: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setShowExplanation(false)}
+                  onClick={() => {
+                    setShowExplanation(false);
+                    if (gameState === 'question') {
+                      setIsCompleted(true);
+                      setGameState('completed');
+                    }
+                  }}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -427,22 +444,26 @@ export const Level3BalloonBumperCars: React.FC = () => {
 
               <div className="space-y-3 text-xs sm:text-sm text-slate-200">
                 <p>
-                  <strong>There are only two kinds of charge:</strong> Benjamin Franklin named them <em>positive (+)</em> and <em>negative (−)</em> over 250 years ago!
+                  <strong>Two Types of Charge:</strong> There are only two types of electric charge in the known universe: <em>positive (+)</em> and <em>negative (−)</em>.
                 </p>
                 <p>
-                  <strong>Like charges repel:</strong> When two negative objects meet, their electric fields push back against each other.
+                  <strong>Like Charges Repel:</strong> When two negative objects or two positive objects approach, their invisible electric field lines push outward, forcing them apart like bumper cars!
                 </p>
                 <p>
-                  <strong>Opposite charges attract:</strong> A negative object pulls toward a positive object with an invisible force called Coulomb's force!
+                  <strong>Opposites Attract:</strong> When a positive and a negative charge approach, electric field lines loop directly between them, pulling them together tightly!
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setShowExplanation(false)}
+                onClick={() => {
+                  setShowExplanation(false);
+                  setIsCompleted(true);
+                  setGameState('completed');
+                }}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Back to Bumper Cars
+                Claim Victory & Stars!
               </button>
             </motion.div>
           </div>

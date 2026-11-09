@@ -57,7 +57,6 @@ export const GameMap: React.FC = () => {
         {/* Level Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {LEVEL_DEFINITIONS.map((level, idx) => {
-            const isUnlocked = stats.unlockedLevels.includes(level.id);
             const progress = stats.levelProgress[level.id];
             const isCompleted = progress?.completed || false;
             const stars = progress?.stars || 0;
@@ -69,11 +68,9 @@ export const GameMap: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.08 }}
                 className={`relative rounded-3xl p-5 comic-border-lg transition-all flex flex-col justify-between ${
-                  isUnlocked
-                    ? isCompleted
-                      ? 'bg-slate-900 border-yellow-400 shadow-[0_4px_20px_rgba(250,204,21,0.15)]'
-                      : 'bg-slate-900 border-sky-400 shadow-[0_4px_20px_rgba(14,165,233,0.15)]'
-                    : 'bg-slate-950/80 border-slate-800 opacity-60'
+                  isCompleted
+                    ? 'bg-slate-900 border-yellow-400 shadow-[0_4px_20px_rgba(250,204,21,0.15)]'
+                    : 'bg-slate-900 border-sky-400 shadow-[0_4px_20px_rgba(14,165,233,0.15)]'
                 }`}
               >
                 {/* Station Number Badge */}
@@ -85,26 +82,19 @@ export const GameMap: React.FC = () => {
                     <span className="text-2xl">{level.icon}</span>
                   </div>
 
-                  {/* Stars / Lock Status */}
-                  {isUnlocked ? (
-                    <div className="flex items-center gap-1 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
-                      {[1, 2, 3].map((starIdx) => (
-                        <Star
-                          key={starIdx}
-                          className={`w-4 h-4 ${
-                            starIdx <= stars
-                              ? 'text-yellow-400 fill-yellow-400'
-                              : 'text-slate-700'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-slate-500 font-bold text-xs bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>LOCKED</span>
-                    </div>
-                  )}
+                  {/* Stars / Completion Status */}
+                  <div className="flex items-center gap-1 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
+                    {[1, 2, 3].map((starIdx) => (
+                      <Star
+                        key={starIdx}
+                        className={`w-4 h-4 ${
+                          starIdx <= stars
+                            ? 'text-yellow-400 fill-yellow-400'
+                            : 'text-slate-700'
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 {/* Info */}
@@ -134,34 +124,27 @@ export const GameMap: React.FC = () => {
 
                 {/* Action button */}
                 <div>
-                  {isUnlocked ? (
-                    <button
-                      type="button"
-                      onClick={() => startLevel(level.id)}
-                      className={`w-full py-3 rounded-2xl font-black text-sm comic-button flex items-center justify-center gap-2 shadow-md ${
-                        isCompleted
-                          ? 'bg-slate-800 hover:bg-slate-700 text-yellow-300 comic-border'
-                          : 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 comic-border-yellow'
-                      }`}
-                    >
-                      {isCompleted ? (
-                        <>
-                          <RotateCcw className="w-4 h-4" />
-                          <span>Replay Experiment</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-4 h-4 fill-slate-950" />
-                          <span>Start Experiment</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <div className="w-full py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 font-bold text-xs flex items-center justify-center gap-2">
-                      <Lock className="w-4 h-4" />
-                      <span>Complete Station #{level.number - 1} to Unlock</span>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => startLevel(level.id)}
+                    className={`w-full py-3 rounded-2xl font-black text-sm comic-button flex items-center justify-center gap-2 shadow-md ${
+                      isCompleted
+                        ? 'bg-slate-800 hover:bg-slate-700 text-yellow-300 comic-border'
+                        : 'bg-yellow-400 hover:bg-yellow-300 text-slate-950 comic-border-yellow'
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <>
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Replay Experiment</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-slate-950" />
+                        <span>Start Experiment</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </motion.div>
             );

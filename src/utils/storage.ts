@@ -260,17 +260,27 @@ export const DEFAULT_SETTINGS: GameSettings = {
   reducedFlash: false,
 };
 
+export const ALL_LEVEL_IDS: LevelId[] = [
+  'level-1',
+  'level-2',
+  'level-3',
+  'level-4',
+  'level-5',
+  'level-6',
+  'sandbox',
+];
+
 export const INITIAL_STATS: PlayerStats = {
   xp: 0,
   rank: 'Spark Apprentice',
-  unlockedLevels: ['level-1', 'sandbox'],
+  unlockedLevels: ALL_LEVEL_IDS,
   levelProgress: {
     'level-1': { levelId: 'level-1', completed: false, stars: 0, score: 0, unlocked: true },
-    'level-2': { levelId: 'level-2', completed: false, stars: 0, score: 0, unlocked: false },
-    'level-3': { levelId: 'level-3', completed: false, stars: 0, score: 0, unlocked: false },
-    'level-4': { levelId: 'level-4', completed: false, stars: 0, score: 0, unlocked: false },
-    'level-5': { levelId: 'level-5', completed: false, stars: 0, score: 0, unlocked: false },
-    'level-6': { levelId: 'level-6', completed: false, stars: 0, score: 0, unlocked: false },
+    'level-2': { levelId: 'level-2', completed: false, stars: 0, score: 0, unlocked: true },
+    'level-3': { levelId: 'level-3', completed: false, stars: 0, score: 0, unlocked: true },
+    'level-4': { levelId: 'level-4', completed: false, stars: 0, score: 0, unlocked: true },
+    'level-5': { levelId: 'level-5', completed: false, stars: 0, score: 0, unlocked: true },
+    'level-6': { levelId: 'level-6', completed: false, stars: 0, score: 0, unlocked: true },
     'sandbox': { levelId: 'sandbox', completed: false, stars: 3, score: 0, unlocked: true },
   },
   unlockedAccessories: ['default'],
@@ -302,10 +312,21 @@ export function loadPlayerStats(): PlayerStats {
     const raw = localStorage.getItem(STATS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Ensure all levels are always unlocked for classroom demonstrations
+      const mergedProgress = { ...INITIAL_STATS.levelProgress, ...(parsed.levelProgress || {}) };
+      ALL_LEVEL_IDS.forEach((lvl) => {
+        if (mergedProgress[lvl]) {
+          mergedProgress[lvl] = { ...mergedProgress[lvl], unlocked: true };
+        } else {
+          mergedProgress[lvl] = { levelId: lvl, completed: false, stars: 0, score: 0, unlocked: true };
+        }
+      });
+
       return {
         ...INITIAL_STATS,
         ...parsed,
-        levelProgress: { ...INITIAL_STATS.levelProgress, ...(parsed.levelProgress || {}) },
+        unlockedLevels: ALL_LEVEL_IDS,
+        levelProgress: mergedProgress,
       };
     }
   } catch {

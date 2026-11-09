@@ -26,7 +26,8 @@ export const FreePlayLab: React.FC = () => {
   ]);
 
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const benchRef = useRef<HTMLDivElement>(null);
+  const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -37,22 +38,35 @@ export const FreePlayLab: React.FC = () => {
   }, []);
 
   const handlePointerDown = (id: string, e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (!benchRef.current) return;
+    const rect = benchRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
     setActiveItemId(id);
+    const item = items.find((it) => it.id === id);
+    if (item) {
+      dragOffset.current = { x: mouseX - item.x, y: mouseY - item.y };
+    }
     lastPos.current = { x: e.clientX, y: e.clientY };
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!activeItemId || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const newX = Math.max(30, Math.min(rect.width - 100, e.clientX - rect.left - 40));
-    const newY = Math.max(30, Math.min(rect.height - 100, e.clientY - rect.top - 40));
+    if (!activeItemId || !benchRef.current) return;
+    const rect = benchRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const newX = Math.max(20, Math.min(rect.width - 90, mouseX - dragOffset.current.x));
+    const newY = Math.max(20, Math.min(rect.height - 90, mouseY - dragOffset.current.y));
 
     setItems((prev) => {
       const active = prev.find((it) => it.id === activeItemId);
       if (!active) return prev;
 
-      // Check if rubbing wool area on bottom-left (x: 20 to 180, y: 280 to 440)
-      const isOverWool = newX >= 10 && newX <= 180 && newY >= 260 && newY <= 440;
+      // Check if rubbing wool area on bottom-left (x: 20 to 180, y: 260 to 440)
+      const isOverWool = newX >= 10 && newX <= 180 && newY >= 240 && newY <= 440;
       let newCharge = active.charge;
 
       if (isOverWool && lastPos.current) {
@@ -82,8 +96,8 @@ export const FreePlayLab: React.FC = () => {
 
           return {
             ...item,
-            x: Math.max(40, Math.min(rect.width - 90, item.x + pushX * 0.15)),
-            y: Math.max(40, Math.min(rect.height - 90, item.y + pushY * 0.15)),
+            x: Math.max(30, Math.min(rect.width - 90, item.x + pushX * 0.15)),
+            y: Math.max(30, Math.min(rect.height - 90, item.y + pushY * 0.15)),
           };
         }
 
@@ -134,7 +148,6 @@ export const FreePlayLab: React.FC = () => {
 
   return (
     <div
-      ref={containerRef}
       className="relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -213,7 +226,10 @@ export const FreePlayLab: React.FC = () => {
       </div>
 
       {/* Main Sandbox Canvas */}
-      <div className="relative flex-1 w-full max-w-6xl mx-auto my-3 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[480px]">
+      <div
+        ref={benchRef}
+        className="relative flex-1 w-full max-w-6xl mx-auto my-3 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[480px]"
+      >
         {/* Lab Table Grid Texture */}
         <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:20px_20px]" />
 

@@ -1,68 +1,69 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, Info, ArrowRight, Sparkles, CloudRain, Zap, CloudLightning } from 'lucide-react';
+import { RotateCcw, Info, ArrowRight, Sparkles } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
-import { PredictionModal, PredictionOption } from '../ui/PredictionModal';
+import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
 import { LevelCompleteModal } from '../ui/LevelCompleteModal';
 import { soundManager } from '../../utils/audio';
+
+type Level5State = 'colliding' | 'striking' | 'question' | 'explanation' | 'completed';
 
 interface CloudParticle {
   id: number;
   x: number;
   y: number;
-  type: 'ice' | 'graupel'; // ice = positive top, graupel = negative bottom
+  type: 'ice' | 'graupel';
   isColliding: boolean;
 }
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
   {
     id: 'opt-lightning',
-    text: 'A massive static electric spark (lightning) will jump from cloud to ground!',
+    text: 'Millions of colliding ice crystals separated positive and negative charges until a giant spark (lightning) jumped to the ground!',
     isCorrect: true,
-    feedback: 'Spot on! When the voltage difference reaches millions of volts, static electricity breaks through the air as lightning!',
+    feedback: 'Spot on! Collisions between light ice crystals and heavy graupel separate massive electric charges inside thunderstorms!',
   },
   {
     id: 'opt-pop',
-    text: 'The cloud will pop like a soap bubble and disappear.',
+    text: 'The cloud popped like a giant soapy bubble from too much air pressure.',
     isCorrect: false,
-    feedback: 'Clouds are made of trillions of tiny droplets and ice crystals—they don’t pop like soap bubbles!',
+    feedback: 'Clouds are made of trillions of tiny water droplets and ice particles—they do not pop like soap bubbles!',
   },
   {
     id: 'opt-freeze',
-    text: 'The ground will instantly freeze into solid ice.',
+    text: 'The ground became frozen into solid ice from the ice particles.',
     isCorrect: false,
-    feedback: 'Lightning creates unbelievable heat (over 30,000 Kelvin!), definitely not freezing!',
+    feedback: 'Lightning creates extreme heat (over 30,000 Kelvin!), five times hotter than the surface of the Sun!',
   },
 ];
 
 export const Level5LightningStorm: React.FC = () => {
   const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges, settings } = useGame();
 
+  const [gameState, setGameState] = useState<Level5State>('colliding');
   const [stormCharge, setStormCharge] = useState(0); // 0 to 1
   const [isStriking, setIsStriking] = useState(false);
-  const [strikeCount, setStrikeCount] = useState(0);
 
   const [showPrediction, setShowPrediction] = useState(false);
-  const [hasPredicted, setHasPredicted] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
 
-  // Cloud particles
+  // Cloud particles inside the thundercloud
   const [particles, setParticles] = useState<CloudParticle[]>(() =>
-    Array.from({ length: 18 }).map((_, i) => ({
+    Array.from({ length: 16 }).map((_, i) => ({
       id: i,
-      x: 180 + (i % 6) * 70 + Math.random() * 20,
-      y: 90 + Math.floor(i / 6) * 35 + Math.random() * 15,
+      x: 120 + (i % 6) * 60 + Math.random() * 20,
+      y: 60 + Math.floor(i / 6) * 35 + Math.random() * 15,
       type: i % 2 === 0 ? 'ice' : 'graupel',
       isColliding: false,
     }))
   );
 
   const [activeParticleId, setActiveParticleId] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const benchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     soundManager.setMusicTrack('storm');
@@ -77,15 +78,17 @@ export const Level5LightningStorm: React.FC = () => {
 
   const triggerLightningStrike = () => {
     setIsStriking(true);
+    setGameState('striking');
     soundManager.playThunder(settings.reducedFlash);
-    setDialogue("KA-BOOOOM! A GIANT STATIC SPARK! Stepped leader meets upward streamer!", 'surprised');
-    setStrikeCount((c) => c + 1);
+    setDialogue("KA-BOOOOM! A SPECTACULAR LIGHTNING STRIKE! Stepped leader connects to the upward streamer!", 'surprised');
 
     setTimeout(() => {
       setIsStriking(false);
-      if (!isCompleted) {
-        setIsCompleted(true);
-      }
+      // Wait 1.5s after the strike animation finishes to present the question
+      setTimeout(() => {
+        setShowPrediction(true);
+        setGameState('question');
+      }, 1500);
     }, 700);
   };
 
@@ -94,10 +97,10 @@ export const Level5LightningStorm: React.FC = () => {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (activeParticleId === null || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const newX = e.clientX - rect.left;
-    const newY = e.clientY - rect.top;
+    if (activeParticleId === null || !benchRef.current || gameState !== 'colliding') return;
+    const rect = benchRef.current.getBoundingClientRect();
+    const newX = Math.max(40, Math.min(rect.width - 60, e.clientX - rect.left));
+    const newY = Math.max(30, Math.min(220, e.clientY - rect.top));
 
     setParticles((prev) => {
       return prev.map((p) => {
@@ -105,16 +108,13 @@ export const Level5LightningStorm: React.FC = () => {
           return { ...p, x: newX, y: newY };
         }
 
-        // Check collision between active particle and other particles
+        // Collision check
         const dist = Math.hypot(p.x - newX, p.y - newY);
-        if (dist < 40 && !p.isColliding) {
+        if (dist < 45 && !p.isColliding) {
           soundManager.playSpark();
           setStormCharge((sc) => {
-            const nextSc = Math.min(1, sc + 0.07);
-            if (nextSc > 0.5 && !hasPredicted && !showPrediction) {
-              setShowPrediction(true);
-            }
-            if (nextSc >= 1 && !isStriking) {
+            const nextSc = Math.min(1, sc + 0.08);
+            if (nextSc >= 1 && !isStriking && gameState === 'colliding') {
               triggerLightningStrike();
             }
             return nextSc;
@@ -134,12 +134,15 @@ export const Level5LightningStorm: React.FC = () => {
     soundManager.playClick();
     setStormCharge(0);
     setIsStriking(false);
+    setGameState('colliding');
+    setShowPrediction(false);
+    setShowExplanation(false);
+    setIsCompleted(false);
     setDialogue("Reset! Stir up the ice crystals to build another thunderstorm!", 'excited');
   };
 
   return (
     <div
-      ref={containerRef}
       className={`relative min-h-[calc(100vh-65px)] bg-slate-950 p-4 sm:p-6 overflow-hidden select-none flex flex-col justify-between transition-colors duration-100 ${
         isStriking && !settings.reducedFlash ? 'bg-slate-100' : ''
       }`}
@@ -162,7 +165,7 @@ export const Level5LightningStorm: React.FC = () => {
         }
         transition={{ duration: 0.4 }}
       >
-        {/* Header Bar */}
+        {/* Top Header Controls */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl comic-border-lg z-30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 font-black flex items-center justify-center comic-border-yellow text-lg">
@@ -173,7 +176,9 @@ export const Level5LightningStorm: React.FC = () => {
                 The Sky's Giant Spark
               </h1>
               <p className="text-xs font-bold text-sky-400">
-                Objective: Collide ice particles to separate cloud charges and trigger a lightning strike!
+                {stormCharge < 1
+                  ? "Step 1: Collide ice particles inside the cloud to build up electrical voltage!"
+                  : "Massive lightning discharge triggered!"}
               </p>
             </div>
           </div>
@@ -202,8 +207,11 @@ export const Level5LightningStorm: React.FC = () => {
           </div>
         </div>
 
-        {/* Storm Sky & Landscape Scene */}
-        <div className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-slate-900 via-indigo-950/80 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]">
+        {/* Storm Sky & Landscape Workbench */}
+        <div
+          ref={benchRef}
+          className="relative flex-1 w-full max-w-5xl mx-auto my-3 bg-gradient-to-b from-slate-900 via-indigo-950/80 to-slate-950 rounded-3xl comic-border-lg p-4 sm:p-8 overflow-hidden shadow-2xl min-h-[460px]"
+        >
           {/* Storm Charge Meter HUD */}
           <div className="absolute top-4 left-4 z-20">
             <ChargeMeter
@@ -237,7 +245,6 @@ export const Level5LightningStorm: React.FC = () => {
 
           {/* TOWERING THUNDERCLOUD (Cumulonimbus) */}
           <div className="relative mx-auto w-full max-w-2xl h-56 mt-4">
-            {/* Cloud SVG Body (darkens as stormCharge increases) */}
             <svg width="100%" height="220" viewBox="0 0 600 220" className="overflow-visible">
               <defs>
                 <linearGradient id="cloudGrad" x1="0" y1="0" x2="0" y2="1">
@@ -252,21 +259,16 @@ export const Level5LightningStorm: React.FC = () => {
                 </linearGradient>
               </defs>
 
-              {/* Massive Cumulonimbus Puffs */}
               <ellipse cx="300" cy="110" rx="260" ry="85" fill="url(#cloudGrad)" stroke="#0f172a" strokeWidth="4" />
               <circle cx="180" cy="80" r="75" fill="url(#cloudGrad)" />
               <circle cx="320" cy="60" r="90" fill="url(#cloudGrad)" />
               <circle cx="440" cy="85" r="70" fill="url(#cloudGrad)" />
 
-              {/* Cloud Charge Separation Regions (Positive at Top, Negative at Bottom) */}
               {showInvisibleCharges && (
                 <g>
-                  {/* Top Positive Ice (+ + +) */}
                   <text x="200" y="55" fill="#ef4444" fontSize="16" fontWeight="900">+</text>
                   <text x="310" y="45" fill="#ef4444" fontSize="16" fontWeight="900">+</text>
                   <text x="420" y="55" fill="#ef4444" fontSize="16" fontWeight="900">+</text>
-
-                  {/* Bottom Negative Graupel (− − −) */}
                   <text x="170" y="155" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
                   <text x="240" y="165" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
                   <text x="310" y="170" fill="#0ea5e9" fontSize="20" fontWeight="900">−</text>
@@ -300,10 +302,9 @@ export const Level5LightningStorm: React.FC = () => {
             </div>
           </div>
 
-          {/* LIGHTNING BOLT SVG (Active during strike) */}
+          {/* LIGHTNING BOLT (Active during strike) */}
           {isStriking && (
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-40 overflow-visible">
-              {/* Stepped leader zig-zag bolt */}
               <polyline
                 points="330,170 310,240 350,280 290,360 330,420 300,470"
                 fill="none"
@@ -320,7 +321,6 @@ export const Level5LightningStorm: React.FC = () => {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {/* Secondary Branch */}
               <polyline
                 points="310,240 250,290 230,340"
                 fill="none"
@@ -331,9 +331,8 @@ export const Level5LightningStorm: React.FC = () => {
             </svg>
           )}
 
-          {/* GROUND LANDSCAPE BELOW (With induced positive charges) */}
+          {/* GROUND LANDSCAPE (Induced positive charge) */}
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-emerald-950 to-slate-900 border-t-4 border-emerald-900/80 flex items-center justify-around px-8">
-            {/* Induced positive ground charges (+) */}
             {showInvisibleCharges && (
               <div className="flex justify-around w-full text-rose-400 font-black text-sm">
                 <span>+</span>
@@ -349,7 +348,6 @@ export const Level5LightningStorm: React.FC = () => {
             </div>
           </div>
 
-          {/* Prompt banner if low charge */}
           {stormCharge < 0.3 && (
             <div className="absolute inset-x-0 bottom-28 flex justify-center pointer-events-none">
               <span className="bg-yellow-400 text-slate-950 px-4 py-1.5 rounded-full font-black text-xs animate-bounce shadow">
@@ -368,35 +366,36 @@ export const Level5LightningStorm: React.FC = () => {
             staticHairCharge={stormCharge}
           />
 
-          {isCompleted && (
+          {gameState === 'completed' && (
             <button
               type="button"
               onClick={() => completeLevel('level-5', 3, 140)}
               className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
             >
-              <span>Proceed to Victory Screen!</span>
+              <span>Proceed to Next Experiment!</span>
               <ArrowRight className="w-5 h-5" />
             </button>
           )}
         </div>
       </motion.div>
 
-      {/* PREDICTION MODAL */}
+      {/* PREDICTION MODAL (Appears ONLY after lightning strike finishes) */}
       <PredictionModal
         isOpen={showPrediction}
-        question="Millions of colliding ice crystals have built an enormous electrical difference! What will happen next?"
+        question="You witnessed a blinding static lightning discharge! What caused this giant spark to jump through the sky?"
+        subtitle="Analyze your experimental observation!"
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setHasPredicted(true);
-          setDialogue("Spot on! Keep colliding particles until the 100% threshold discharges a massive bolt!", 'excited');
+          setShowExplanation(true);
+          setDialogue("BRILLIANT! Colliding ice crystals create massive charge separation until millions of volts ionize the air!", 'celebrating');
         }}
       />
 
       {/* SCIENCE EXPLANATION */}
       <AnimatePresence>
         {showExplanation && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -410,7 +409,13 @@ export const Level5LightningStorm: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setShowExplanation(false)}
+                  onClick={() => {
+                    setShowExplanation(false);
+                    if (gameState === 'question') {
+                      setIsCompleted(true);
+                      setGameState('completed');
+                    }
+                  }}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -419,22 +424,26 @@ export const Level5LightningStorm: React.FC = () => {
 
               <div className="space-y-3 text-xs sm:text-sm text-slate-200">
                 <p>
-                  <strong>How charges separate:</strong> In storm updrafts, lighter ice crystals collide with heavier slush/graupel. The ice crystals lose electrons (becoming positive and rising), while the graupel gains electrons (becoming negative and sinking to the cloud base).
+                  <strong>How charges separate:</strong> In storm updrafts, lighter ice crystals collide with heavier slush/graupel. The ice crystals lose electrons (becoming positive and rising to the cloud top), while the graupel gains electrons (becoming negative and sinking to the cloud base).
                 </p>
                 <p>
                   <strong>Stepped leader meets streamer:</strong> When the voltage difference reaches tens of millions of volts, a branching path of ionized air called a stepped leader shoots down, meeting an upward streamer from the ground.
                 </p>
                 <p>
-                  <strong>Why does thunder rumble?</strong> Lightning heats the surrounding air channel to roughly 30,000 K (5 times hotter than the Sun's surface!). This explosive expansion creates the sonic boom we hear as thunder!
+                  <strong>Why does thunder rumble?</strong> Lightning heats the surrounding air channel to roughly 30,000 K (5 times hotter than the Sun's surface!). This explosive expansion creates the sonic shockwave we hear as thunder!
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setShowExplanation(false)}
+                onClick={() => {
+                  setShowExplanation(false);
+                  setIsCompleted(true);
+                  setGameState('completed');
+                }}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Back to Storm
+                Claim Victory & Stars!
               </button>
             </motion.div>
           </div>
