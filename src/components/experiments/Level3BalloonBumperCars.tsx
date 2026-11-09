@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { RotateCcw, Info, ArrowRight, Sparkles, Zap } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
 import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
-import { LevelCompleteModal } from '../ui/LevelCompleteModal';
+import { OptionalLearningModal } from '../ui/OptionalLearningModal';
 import { soundManager } from '../../utils/audio';
 
 type ChargeType = 'negative' | 'positive' | 'neutral';
@@ -45,6 +46,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
   const [discoveredRepulsion, setDiscoveredRepulsion] = useState(false);
   const [discoveredAttraction, setDiscoveredAttraction] = useState(false);
 
+  const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -144,12 +146,27 @@ export const Level3BalloonBumperCars: React.FC = () => {
     }
 
     // Trigger completion sequence only after player has witnessed both repulsion and attraction
-    if (discoveredRepulsion && discoveredAttraction && gameState === 'experimenting') {
+    if (discoveredRepulsion && discoveredAttraction && !isCompleted) {
+      setIsCompleted(true);
       setGameState('discovered');
+      soundManager.playFanfare();
+      completeLevel('level-3', 3, 190);
+
+      confetti({
+        particleCount: 70,
+        spread: 65,
+        origin: { y: 0.6 },
+        colors: ['#0ea5e9', '#facc15', '#ef4444', '#10b981'],
+      });
+
+      setDialogue(
+        "OPPOSITES ATTRACT & LIKES REPEL! You discovered the fundamental law of charges! Choose what to explore next!",
+        'celebrating'
+      );
+
       setTimeout(() => {
-        setShowPrediction(true);
-        setGameState('question');
-      }, 1500);
+        setShowLearningChoice(true);
+      }, 800);
     }
   };
 
@@ -166,6 +183,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
     setDiscoveredRepulsion(false);
     setDiscoveredAttraction(false);
     setGameState('experimenting');
+    setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
@@ -387,19 +405,44 @@ export const Level3BalloonBumperCars: React.FC = () => {
           mood={discoveredAttraction && discoveredRepulsion ? 'celebrating' : 'excited'}
         />
 
-        {gameState === 'completed' && (
-          <button
-            type="button"
-            onClick={() => completeLevel('level-3', 3, 120)}
-            className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
-          >
-            <span>Proceed to Next Experiment!</span>
-            <ArrowRight className="w-5 h-5" />
-          </button>
+        {isCompleted && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLearningChoice(true)}
+              className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Experiment Menu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => startLevel('level-4')}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+            >
+              <span>Next Station →</span>
+            </button>
+          </div>
         )}
       </div>
 
-      {/* PREDICTION MODAL (Appears ONLY after observing repulsion & attraction) */}
+      {/* OPTIONAL LEARNING MODAL */}
+      <OptionalLearningModal
+        isOpen={showLearningChoice}
+        levelTitle="Balloon Bumper Cars"
+        onKeepExperimenting={() => setShowLearningChoice(false)}
+        onLearnWhy={() => {
+          setShowLearningChoice(false);
+          setShowExplanation(true);
+        }}
+        onTryQuestion={() => {
+          setShowLearningChoice(false);
+          setShowPrediction(true);
+        }}
+        onNextLevel={() => startLevel('level-4')}
+      />
+
+      {/* PREDICTION MODAL */}
       <PredictionModal
         isOpen={showPrediction}
         question="You tested both charge configurations! What is the fundamental rule governing electric charges?"
@@ -407,7 +450,6 @@ export const Level3BalloonBumperCars: React.FC = () => {
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setShowExplanation(true);
           setDialogue("ABSOLUTELY RIGHT! Like charges repel each other, and opposite charges attract!", 'celebrating');
         }}
       />
@@ -429,13 +471,7 @@ export const Level3BalloonBumperCars: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowExplanation(false);
-                    if (gameState === 'question') {
-                      setIsCompleted(true);
-                      setGameState('completed');
-                    }
-                  }}
+                  onClick={() => setShowExplanation(false)}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -456,33 +492,15 @@ export const Level3BalloonBumperCars: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowExplanation(false);
-                  setIsCompleted(true);
-                  setGameState('completed');
-                }}
+                onClick={() => setShowExplanation(false)}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Claim Victory & Stars!
+                Back to Experiment
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* LEVEL COMPLETE MODAL */}
-      <LevelCompleteModal
-        isOpen={isCompleted}
-        levelId="level-3"
-        levelTitle="Balloon Bumper Cars"
-        starsEarned={3}
-        xpGained={190}
-        unlockedPageTitle="The Golden Law of Charges"
-        keyTakeaway="Same charges repel and push apart; opposite charges attract and pull together!"
-        onNextLevel={() => startLevel('level-4')}
-        onReplay={resetExperiment}
-        onClose={() => setView('map')}
-      />
     </div>
   );
 };

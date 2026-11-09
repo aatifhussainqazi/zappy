@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { RotateCcw, Info, ArrowRight, Sparkles, HelpCircle } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
 import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
-import { LevelCompleteModal } from '../ui/LevelCompleteModal';
+import { OptionalLearningModal } from '../ui/OptionalLearningModal';
 import { soundManager } from '../../utils/audio';
 
 type Level2State = 'pick_balloon' | 'rubbing' | 'charged' | 'moving_to_wall' | 'stuck' | 'question' | 'explanation' | 'completed';
@@ -42,6 +43,7 @@ export const Level2BalloonWall: React.FC = () => {
   const [isRubbingHair, setIsRubbingHair] = useState(false);
   const [isStuckToWall, setIsStuckToWall] = useState(false);
 
+  const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -136,19 +138,29 @@ export const Level2BalloonWall: React.FC = () => {
         setBalloonPos({ x: stickX, y: balloonPos.y });
         setIsStuckToWall(true);
         setGameState('stuck');
+        setIsCompleted(true);
 
         soundManager.playPop();
         soundManager.playSpark();
+        soundManager.playFanfare();
+        completeLevel('level-2', 3, 180);
+
+        confetti({
+          particleCount: 70,
+          spread: 65,
+          origin: { y: 0.6 },
+          colors: ['#ef4444', '#facc15', '#0ea5e9', '#10b981'],
+        });
+
         setDialogue(
-          "IT STICKS! Look at that balloon cling against gravity! The neutral wall has polarized!",
-          'surprised'
+          "IT STICKS! Look at that balloon cling against gravity! The neutral wall has polarized! Choose what to explore next!",
+          'celebrating'
         );
 
-        // After sticking for 1.5 seconds, present the question
+        // Offer optional learning panel without interrupting experiment
         setTimeout(() => {
-          setShowPrediction(true);
-          setGameState('question');
-        }, 1500);
+          setShowLearningChoice(true);
+        }, 800);
       } else {
         // Not enough charge to defeat gravity
         soundManager.playWrong();
@@ -172,6 +184,7 @@ export const Level2BalloonWall: React.FC = () => {
     setIsDragging(false);
     setIsRubbingHair(false);
     setGameState('pick_balloon');
+    setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
@@ -423,19 +436,44 @@ export const Level2BalloonWall: React.FC = () => {
           staticHairCharge={charge}
         />
 
-        {gameState === 'completed' && (
-          <button
-            type="button"
-            onClick={() => completeLevel('level-2', 3, 110)}
-            className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
-          >
-            <span>Proceed to Next Experiment!</span>
-            <ArrowRight className="w-5 h-5" />
-          </button>
+        {isCompleted && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLearningChoice(true)}
+              className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Experiment Menu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => startLevel('level-3')}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+            >
+              <span>Next Station →</span>
+            </button>
+          </div>
         )}
       </div>
 
-      {/* PREDICTION MODAL (Appears ONLY after balloon sticks to wall) */}
+      {/* OPTIONAL LEARNING MODAL */}
+      <OptionalLearningModal
+        isOpen={showLearningChoice}
+        levelTitle="Balloon vs. Wall"
+        onKeepExperimenting={() => setShowLearningChoice(false)}
+        onLearnWhy={() => {
+          setShowLearningChoice(false);
+          setShowExplanation(true);
+        }}
+        onTryQuestion={() => {
+          setShowLearningChoice(false);
+          setShowPrediction(true);
+        }}
+        onNextLevel={() => startLevel('level-3')}
+      />
+
+      {/* PREDICTION MODAL */}
       <PredictionModal
         isOpen={showPrediction}
         question="You watched the balloon stick firmly to the wall against gravity! Why does it cling to the neutral wall?"
@@ -443,7 +481,6 @@ export const Level2BalloonWall: React.FC = () => {
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setShowExplanation(true);
           setDialogue(
             "SPOT ON! The balloon's negative charge repels electrons in the wall's surface atoms, creating local positive attraction!",
             'celebrating'
@@ -468,13 +505,7 @@ export const Level2BalloonWall: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowExplanation(false);
-                    if (gameState === 'question') {
-                      setIsCompleted(true);
-                      setGameState('completed');
-                    }
-                  }}
+                  onClick={() => setShowExplanation(false)}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -495,33 +526,15 @@ export const Level2BalloonWall: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowExplanation(false);
-                  setIsCompleted(true);
-                  setGameState('completed');
-                }}
+                onClick={() => setShowExplanation(false)}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Claim Victory & Stars!
+                Back to Experiment
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* LEVEL COMPLETE MODAL */}
-      <LevelCompleteModal
-        isOpen={isCompleted}
-        levelId="level-2"
-        levelTitle="Balloon vs. Wall"
-        starsEarned={3}
-        xpGained={180}
-        unlockedPageTitle="The Sticky Balloon Mystery"
-        keyTakeaway="Rubber balloons accumulate negative static charge, causing neutral wall surfaces to polarize and stick against gravity!"
-        onNextLevel={() => startLevel('level-3')}
-        onReplay={resetExperiment}
-        onClose={() => setView('map')}
-      />
     </div>
   );
 };

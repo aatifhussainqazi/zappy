@@ -202,6 +202,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   />
                 </button>
               </div>
+
+              {/* Free Experiment Mode (Classroom Mode) */}
+              <div className="flex items-center justify-between bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
+                <div>
+                  <div className="font-bold text-sm text-yellow-300">Free Experiment Mode</div>
+                  <div className="text-[11px] text-slate-400">Questions & lessons never interrupt; choose when to learn</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ freeExperimentMode: !settings.freeExperimentMode })}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    settings.freeExperimentMode ? 'bg-amber-500' : 'bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                      settings.freeExperimentMode ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
             {/* Reset Progress */}

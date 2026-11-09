@@ -258,6 +258,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   showInvisibleCharges: true,
   reducedMotion: false,
   reducedFlash: false,
+  freeExperimentMode: true, // Default to Free Experiment Mode for classroom presentation freedom
 };
 
 export const ALL_LEVEL_IDS: LevelId[] = [
@@ -268,6 +269,17 @@ export const ALL_LEVEL_IDS: LevelId[] = [
   'level-5',
   'level-6',
   'sandbox',
+];
+
+export const ALL_DISCOVERY_PAGE_IDS: string[] = [
+  'disc-1',
+  'disc-2',
+  'disc-3',
+  'disc-4',
+  'disc-5',
+  'disc-6',
+  'disc-7',
+  'disc-8',
 ];
 
 export const INITIAL_STATS: PlayerStats = {
@@ -285,7 +297,7 @@ export const INITIAL_STATS: PlayerStats = {
   },
   unlockedAccessories: ['default'],
   currentAccessory: null,
-  discoveryPages: ['disc-1'],
+  discoveryPages: ALL_DISCOVERY_PAGE_IDS,
   achievements: INITIAL_ACHIEVEMENTS,
 };
 
@@ -327,6 +339,7 @@ export function loadPlayerStats(): PlayerStats {
         ...parsed,
         unlockedLevels: ALL_LEVEL_IDS,
         levelProgress: mergedProgress,
+        discoveryPages: ALL_DISCOVERY_PAGE_IDS,
       };
     }
   } catch {

@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { RotateCcw, Info, ArrowRight, Sparkles } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
 import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
-import { LevelCompleteModal } from '../ui/LevelCompleteModal';
+import { OptionalLearningModal } from '../ui/OptionalLearningModal';
 import { soundManager } from '../../utils/audio';
 
 type Level5State = 'colliding' | 'striking' | 'question' | 'explanation' | 'completed';
@@ -47,6 +48,7 @@ export const Level5LightningStorm: React.FC = () => {
   const [stormCharge, setStormCharge] = useState(0); // 0 to 1
   const [isStriking, setIsStriking] = useState(false);
 
+  const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -79,16 +81,25 @@ export const Level5LightningStorm: React.FC = () => {
   const triggerLightningStrike = () => {
     setIsStriking(true);
     setGameState('striking');
+    setIsCompleted(true);
     soundManager.playThunder(settings.reducedFlash);
-    setDialogue("KA-BOOOOM! A SPECTACULAR LIGHTNING STRIKE! Stepped leader connects to the upward streamer!", 'surprised');
+    soundManager.playFanfare();
+    completeLevel('level-5', 3, 220);
+
+    confetti({
+      particleCount: 80,
+      spread: 75,
+      origin: { y: 0.5 },
+      colors: ['#38bdf8', '#facc15', '#ffffff', '#a855f7'],
+    });
+
+    setDialogue("KA-BOOOOM! A SPECTACULAR LIGHTNING STRIKE! Stepped leader connects to the upward streamer! Choose what to explore next!", 'celebrating');
 
     setTimeout(() => {
       setIsStriking(false);
-      // Wait 1.5s after the strike animation finishes to present the question
       setTimeout(() => {
-        setShowPrediction(true);
-        setGameState('question');
-      }, 1500);
+        setShowLearningChoice(true);
+      }, 600);
     }, 700);
   };
 
@@ -135,6 +146,7 @@ export const Level5LightningStorm: React.FC = () => {
     setStormCharge(0);
     setIsStriking(false);
     setGameState('colliding');
+    setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
@@ -366,20 +378,45 @@ export const Level5LightningStorm: React.FC = () => {
             staticHairCharge={stormCharge}
           />
 
-          {gameState === 'completed' && (
-            <button
-              type="button"
-              onClick={() => completeLevel('level-5', 3, 140)}
-              className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
-            >
-              <span>Proceed to Next Experiment!</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
+          {isCompleted && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowLearningChoice(true)}
+                className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Experiment Menu</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => startLevel('level-6')}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+              >
+                <span>Next Station →</span>
+              </button>
+            </div>
           )}
         </div>
       </motion.div>
 
-      {/* PREDICTION MODAL (Appears ONLY after lightning strike finishes) */}
+      {/* OPTIONAL LEARNING MODAL */}
+      <OptionalLearningModal
+        isOpen={showLearningChoice}
+        levelTitle="The Sky's Giant Spark"
+        onKeepExperimenting={() => setShowLearningChoice(false)}
+        onLearnWhy={() => {
+          setShowLearningChoice(false);
+          setShowExplanation(true);
+        }}
+        onTryQuestion={() => {
+          setShowLearningChoice(false);
+          setShowPrediction(true);
+        }}
+        onNextLevel={() => startLevel('level-6')}
+      />
+
+      {/* PREDICTION MODAL */}
       <PredictionModal
         isOpen={showPrediction}
         question="You witnessed a blinding static lightning discharge! What caused this giant spark to jump through the sky?"
@@ -387,7 +424,6 @@ export const Level5LightningStorm: React.FC = () => {
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setShowExplanation(true);
           setDialogue("BRILLIANT! Colliding ice crystals create massive charge separation until millions of volts ionize the air!", 'celebrating');
         }}
       />
@@ -409,13 +445,7 @@ export const Level5LightningStorm: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowExplanation(false);
-                    if (gameState === 'question') {
-                      setIsCompleted(true);
-                      setGameState('completed');
-                    }
-                  }}
+                  onClick={() => setShowExplanation(false)}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -436,33 +466,15 @@ export const Level5LightningStorm: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowExplanation(false);
-                  setIsCompleted(true);
-                  setGameState('completed');
-                }}
+                onClick={() => setShowExplanation(false)}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Claim Victory & Stars!
+                Back to Experiment
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* LEVEL COMPLETE MODAL */}
-      <LevelCompleteModal
-        isOpen={isCompleted}
-        levelId="level-5"
-        levelTitle="The Sky's Giant Spark"
-        starsEarned={3}
-        xpGained={220}
-        unlockedPageTitle="How Clouds Make Lightning & Why Thunder Rumbles"
-        keyTakeaway="Lightning is static electricity on a grand planetary scale caused by colliding ice crystals separating charges inside thunderclouds!"
-        onNextLevel={() => startLevel('level-6')}
-        onReplay={resetExperiment}
-        onClose={() => setView('map')}
-      />
     </div>
   );
 };

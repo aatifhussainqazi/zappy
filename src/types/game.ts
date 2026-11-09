@@ -52,6 +52,7 @@ export interface GameSettings {
   showInvisibleCharges: boolean;
   reducedMotion: boolean;
   reducedFlash: boolean;
+  freeExperimentMode: boolean; // Classroom mode: questions and lessons never pop up automatically
 }
 
 export interface Achievement {

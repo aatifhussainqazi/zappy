@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { RotateCcw, Info, ArrowRight, Sparkles, Zap } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
 import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
-import { LevelCompleteModal } from '../ui/LevelCompleteModal';
+import { OptionalLearningModal } from '../ui/OptionalLearningModal';
 import { soundManager } from '../../utils/audio';
 
 type Level4State = 'pick_balloon' | 'rubbing' | 'charged' | 'bending' | 'question' | 'explanation' | 'completed';
@@ -42,6 +43,7 @@ export const Level4WaterTrick: React.FC = () => {
   const [isRubbing, setIsRubbing] = useState(false);
   const [maxBendAchieved, setMaxBendAchieved] = useState(false);
 
+  const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -116,19 +118,29 @@ export const Level4WaterTrick: React.FC = () => {
     const streamX = rect.width - 150;
     const distToStream = Math.abs(newX + 45 - streamX);
 
-    if (charge >= 0.7 && distToStream < 190 && !maxBendAchieved && gameState !== 'question' && gameState !== 'completed') {
+    if (charge >= 0.7 && distToStream < 190 && !maxBendAchieved && !isCompleted) {
       setMaxBendAchieved(true);
+      setIsCompleted(true);
       setGameState('bending');
       soundManager.playAttract();
+      soundManager.playFanfare();
+      completeLevel('level-4', 3, 200);
+
+      confetti({
+        particleCount: 70,
+        spread: 65,
+        origin: { y: 0.6 },
+        colors: ['#0ea5e9', '#38bdf8', '#facc15', '#10b981'],
+      });
+
       setDialogue(
-        "LOOK AT THAT! THE WATER STREAM IS BENDING! Water molecules are rotating to pull toward the balloon!",
-        'surprised'
+        "LOOK AT THAT! THE WATER STREAM IS BENDING! Water molecules are rotating to pull toward the balloon! Choose what to explore next!",
+        'celebrating'
       );
 
       setTimeout(() => {
-        setShowPrediction(true);
-        setGameState('question');
-      }, 1500);
+        setShowLearningChoice(true);
+      }, 800);
     }
   };
 
@@ -155,6 +167,7 @@ export const Level4WaterTrick: React.FC = () => {
     setBalloonPos({ x: 200, y: 150 });
     setMaxBendAchieved(false);
     setGameState('pick_balloon');
+    setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
     setIsCompleted(false);
@@ -370,19 +383,44 @@ export const Level4WaterTrick: React.FC = () => {
           staticHairCharge={charge}
         />
 
-        {gameState === 'completed' && (
-          <button
-            type="button"
-            onClick={() => completeLevel('level-4', 3, 130)}
-            className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
-          >
-            <span>Proceed to Next Experiment!</span>
-            <ArrowRight className="w-5 h-5" />
-          </button>
+        {isCompleted && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLearningChoice(true)}
+              className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow-lg flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Experiment Menu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => startLevel('level-5')}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+            >
+              <span>Next Station →</span>
+            </button>
+          </div>
         )}
       </div>
 
-      {/* PREDICTION MODAL (Appears ONLY after water bends) */}
+      {/* OPTIONAL LEARNING MODAL */}
+      <OptionalLearningModal
+        isOpen={showLearningChoice}
+        levelTitle="The Magic Water Trick"
+        onKeepExperimenting={() => setShowLearningChoice(false)}
+        onLearnWhy={() => {
+          setShowLearningChoice(false);
+          setShowExplanation(true);
+        }}
+        onTryQuestion={() => {
+          setShowLearningChoice(false);
+          setShowPrediction(true);
+        }}
+        onNextLevel={() => startLevel('level-5')}
+      />
+
+      {/* PREDICTION MODAL */}
       <PredictionModal
         isOpen={showPrediction}
         question="You watched the falling stream bend sideways without any physical contact! Why did water curve toward the balloon?"
@@ -390,7 +428,6 @@ export const Level4WaterTrick: React.FC = () => {
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setShowExplanation(true);
           setDialogue("BRILLIANT! Water molecules act like tiny electrostatic dipoles that pivot toward the charged balloon!", 'celebrating');
         }}
       />
@@ -412,13 +449,7 @@ export const Level4WaterTrick: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowExplanation(false);
-                    if (gameState === 'question') {
-                      setIsCompleted(true);
-                      setGameState('completed');
-                    }
-                  }}
+                  onClick={() => setShowExplanation(false)}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -439,33 +470,15 @@ export const Level4WaterTrick: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowExplanation(false);
-                  setIsCompleted(true);
-                  setGameState('completed');
-                }}
+                onClick={() => setShowExplanation(false)}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Claim Victory & Stars!
+                Back to Experiment
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* LEVEL COMPLETE MODAL */}
-      <LevelCompleteModal
-        isOpen={isCompleted}
-        levelId="level-4"
-        levelTitle="The Magic Water Trick"
-        starsEarned={3}
-        xpGained={200}
-        unlockedPageTitle="The Bending Water Phenomenon"
-        keyTakeaway="Water molecules are polar dipoles that rotate toward static electric fields, curving the entire stream sideways!"
-        onNextLevel={() => startLevel('level-5')}
-        onReplay={resetExperiment}
-        onClose={() => setView('map')}
-      />
     </div>
   );
 };

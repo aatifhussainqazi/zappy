@@ -78,8 +78,8 @@ export const NavBar: React.FC<NavBarProps> = ({ onOpenSettings, onOpenWardrobe }
         >
           <BookOpen className="w-4 h-4 text-amber-400" />
           <span className="hidden sm:inline">Discovery Book</span>
-          <span className="text-[10px] bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-full font-black">
-            {stats.discoveryPages.length}/8
+          <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full font-black">
+            All Open
           </span>
         </button>
       </nav>

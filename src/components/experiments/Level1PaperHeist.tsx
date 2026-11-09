@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, Info, Sparkles, HelpCircle, Check, ArrowRight, Zap } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { RotateCcw, Info, Sparkles, HelpCircle, ArrowRight } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { ProfessorZappy } from '../character/ProfessorZappy';
 import { ChargeMeter } from '../ui/ChargeMeter';
 import { ParticleVisualizationToggle, ParticleLegend } from '../ui/ParticleVisualization';
 import { PredictionModal, type PredictionOption } from '../ui/PredictionModal';
-import { LevelCompleteModal } from '../ui/LevelCompleteModal';
+import { OptionalLearningModal } from '../ui/OptionalLearningModal';
 import { soundManager } from '../../utils/audio';
 
-type Level1State = 'pick_ruler' | 'rubbing' | 'charged' | 'attracting' | 'question' | 'explanation' | 'completed';
+const TOTAL_PAPERS = 8;
 
 interface PaperPiece {
   id: number;
@@ -18,20 +19,20 @@ interface PaperPiece {
   currentX: number;
   currentY: number;
   rotation: number;
-  isStuck: boolean;
+  isAttached: boolean;
   wiggle: boolean;
 }
 
 const PREDICTION_OPTIONS: PredictionOption[] = [
   {
     id: 'opt-polarize',
-    text: 'The paper pieces fly up because the ruler shifts their atomic charges (polarization)!',
+    text: 'The paper pieces fly up because the ruler shifts their atomic charges (induced polarization)!',
     isCorrect: true,
     feedback: 'Spot on! The negative ruler pushes electrons inside paper atoms away, leaving the positive side closer and strongly attracted!',
   },
   {
     id: 'opt-sparks',
-    text: 'The paper sticks because static electricity acts like magnetic liquid glue.',
+    text: 'The paper sticks because static electricity creates a sticky chemical glue.',
     isCorrect: false,
     feedback: 'Not glue! It is Coulomb’s electrostatic force between opposite electrical charges acting across empty air!',
   },
@@ -46,33 +47,31 @@ const PREDICTION_OPTIONS: PredictionOption[] = [
 export const Level1PaperHeist: React.FC = () => {
   const { setDialogue, completeLevel, startLevel, setView, showInvisibleCharges, toggleInvisibleCharges } = useGame();
 
-  const [gameState, setGameState] = useState<Level1State>('pick_ruler');
   const [charge, setCharge] = useState(0); // 0 to 1
   const [isRubbing, setIsRubbing] = useState(false);
   const [rulerPos, setRulerPos] = useState({ x: 380, y: 100 });
   const [isDraggingRuler, setIsDraggingRuler] = useState(false);
-  const [stuckCount, setStuckCount] = useState(0);
 
+  // Completion & Optional learning modals
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [showLearningChoice, setShowLearningChoice] = useState(false);
   const [showPrediction, setShowPrediction] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
 
-  // Bench reference for accurate local coordinates
   const benchRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPointerPos = useRef<{ x: number; y: number } | null>(null);
-  const accumulatedFriction = useRef(0);
 
-  // Initialize Paper Pieces scattered on the table
+  // Initialize exact 8 Paper Pieces on the workbench desk
   const [papers, setPapers] = useState<PaperPiece[]>(() => {
-    return Array.from({ length: 12 }).map((_, i) => ({
+    return Array.from({ length: TOTAL_PAPERS }).map((_, i) => ({
       id: i,
-      initialX: 340 + (i % 6) * 48 + Math.random() * 15,
-      initialY: 310 + Math.floor(i / 6) * 35 + Math.random() * 15,
-      currentX: 340 + (i % 6) * 48 + Math.random() * 15,
-      currentY: 310 + Math.floor(i / 6) * 35 + Math.random() * 15,
-      rotation: Math.random() * 60 - 30,
-      isStuck: false,
+      initialX: 340 + (i % 4) * 55 + Math.random() * 12,
+      initialY: 310 + Math.floor(i / 4) * 45 + Math.random() * 10,
+      currentX: 340 + (i % 4) * 55 + Math.random() * 12,
+      currentY: 310 + Math.floor(i / 4) * 45 + Math.random() * 10,
+      rotation: Math.random() * 40 - 20,
+      isAttached: false,
       wiggle: false,
     }));
   });
@@ -95,10 +94,6 @@ export const Level1PaperHeist: React.FC = () => {
     setIsDraggingRuler(true);
     dragOffset.current = { x: mouseX - rulerPos.x, y: mouseY - rulerPos.y };
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
-
-    if (gameState === 'pick_ruler') {
-      setDialogue("Great grip! Now rub the ruler vigorously against the wool cloth on the left!", 'thinking');
-    }
   };
 
   // Pointer Move on Workbench
@@ -120,26 +115,22 @@ export const Level1PaperHeist: React.FC = () => {
     const rulerCenterY = newY + 27;
     const isOverWool = rulerCenterX >= 30 && rulerCenterX <= 270 && rulerCenterY >= 50 && rulerCenterY <= 280;
 
-    // Movement detection for friction
+    // Friction detection: requires actual pointer movement
     if (isOverWool && lastPointerPos.current) {
       const dx = e.clientX - lastPointerPos.current.x;
       const dy = e.clientY - lastPointerPos.current.y;
       const moveDist = Math.hypot(dx, dy);
 
-      // Only count actual rubbing movement (not just holding/clicking)
       if (moveDist > 6) {
         setIsRubbing(true);
-        accumulatedFriction.current += moveDist;
-
         setCharge((prev) => {
           const next = Math.min(1, prev + moveDist * 0.0022);
           soundManager.playRubbing(0.7);
           soundManager.playChargeHum(next);
 
-          if (next >= 0.8 && gameState !== 'charged' && gameState !== 'attracting' && gameState !== 'question') {
-            setGameState('charged');
+          if (next >= 0.75 && prev < 0.75) {
             setDialogue(
-              "EXCELLENT! The ruler is fully loaded with extra electrons! Now bring it close to the neutral paper pieces!",
+              "EXCELLENT! The ruler is fully loaded with extra electrons! Now bring it close to the paper pieces!",
               'excited'
             );
           }
@@ -152,21 +143,22 @@ export const Level1PaperHeist: React.FC = () => {
 
     lastPointerPos.current = { x: e.clientX, y: e.clientY };
 
-    // Paper interaction (ONLY if ruler is charged >= 0.7)
-    if (charge >= 0.7) {
+    // Paper attraction and attachment (ONLY if ruler is charged >= 0.70)
+    if (charge >= 0.70) {
       const rulerBottom = newY + 52;
       const currentRulerCenter = newX + 95;
 
-      let newlyStuck = 0;
+      setPapers((prevPapers) => {
+        let attachedCount = 0;
 
-      setPapers((prevPapers) =>
-        prevPapers.map((paper) => {
-          if (paper.isStuck) {
-            // Paper moves with the ruler!
+        const updated = prevPapers.map((paper) => {
+          if (paper.isAttached) {
+            attachedCount++;
+            // Paper moves with ruler
             return {
               ...paper,
-              currentX: newX + (paper.id % 6) * 28 + 12,
-              currentY: rulerBottom - 10 + (paper.id % 2) * 5,
+              currentX: newX + (paper.id * 21) + 12,
+              currentY: rulerBottom - 10 + (paper.id % 2) * 4,
             };
           }
 
@@ -174,16 +166,16 @@ export const Level1PaperHeist: React.FC = () => {
 
           // Wiggle when getting close
           if (dist < 140) {
-            // Jump up and stick when within attraction reach
-            if (dist < 75) {
+            // Attach when close enough to ruler bottom
+            if (dist < 80) {
               soundManager.playPaperFlutter();
               soundManager.playPop();
-              newlyStuck++;
+              attachedCount++;
 
               return {
                 ...paper,
-                isStuck: true,
-                currentX: newX + (paper.id % 6) * 28 + 12,
+                isAttached: true,
+                currentX: newX + (paper.id * 21) + 12,
                 currentY: rulerBottom - 10,
                 rotation: Math.random() * 30 - 15,
                 wiggle: false,
@@ -202,22 +194,32 @@ export const Level1PaperHeist: React.FC = () => {
             wiggle: false,
             currentY: paper.initialY,
           };
-        })
-      );
+        });
 
-      // Check if enough papers have been picked up
-      setStuckCount((prevCount) => {
-        const updated = prevCount + newlyStuck;
-        if (updated >= 6 && gameState !== 'attracting' && gameState !== 'question' && gameState !== 'completed') {
-          setGameState('attracting');
-          setDialogue("THE PAPER HAS BETRAYED GRAVITY! Look at the neutral paper cling to the negative ruler!", 'surprised');
+        // Trigger completion when ALL paper pieces have successfully attached!
+        if (attachedCount >= TOTAL_PAPERS && !isCompleted) {
+          setIsCompleted(true);
+          soundManager.playFanfare();
+          completeLevel('level-1', 3, 175);
 
-          // Allow the player to see the papers stuck for 1.5 seconds, then transition to the question
+          confetti({
+            particleCount: 70,
+            spread: 65,
+            origin: { y: 0.6 },
+            colors: ['#0ea5e9', '#facc15', '#ef4444', '#10b981'],
+          });
+
+          setDialogue(
+            "ALL 8 PAPERS COLLECTED! Gravity completely defeated by static charges! Choose what to explore next!",
+            'celebrating'
+          );
+
+          // Open the Optional Learning Panel after paper attachment finishes
           setTimeout(() => {
-            setShowPrediction(true);
-            setGameState('question');
-          }, 1500);
+            setShowLearningChoice(true);
+          }, 800);
         }
+
         return updated;
       });
     }
@@ -232,19 +234,17 @@ export const Level1PaperHeist: React.FC = () => {
   const resetExperiment = () => {
     soundManager.playClick();
     setCharge(0);
-    setStuckCount(0);
-    accumulatedFriction.current = 0;
-    setGameState('pick_ruler');
     setIsDraggingRuler(false);
     setIsRubbing(false);
+    setIsCompleted(false);
+    setShowLearningChoice(false);
     setShowPrediction(false);
     setShowExplanation(false);
-    setIsCompleted(false);
     setRulerPos({ x: 380, y: 100 });
     setPapers((prev) =>
       prev.map((p) => ({
         ...p,
-        isStuck: false,
+        isAttached: false,
         wiggle: false,
         currentX: p.initialX,
         currentY: p.initialY,
@@ -255,6 +255,8 @@ export const Level1PaperHeist: React.FC = () => {
       'excited'
     );
   };
+
+  const attachedCount = papers.filter((p) => p.isAttached).length;
 
   return (
     <div
@@ -274,9 +276,11 @@ export const Level1PaperHeist: React.FC = () => {
               The Paper Heist
             </h1>
             <p className="text-xs font-bold text-sky-400">
-              {charge < 0.8
+              {charge < 0.75
                 ? "Step 1: Rub ruler across the wool cloth until fully charged"
-                : "Step 2: Bring the charged ruler close to the paper pieces!"}
+                : attachedCount < TOTAL_PAPERS
+                ? `Step 2: Bring the charged ruler close to the paper pieces! (${attachedCount}/${TOTAL_PAPERS} Collected)`
+                : "All papers attached! Experiment Complete!"}
             </p>
           </div>
         </div>
@@ -357,7 +361,7 @@ export const Level1PaperHeist: React.FC = () => {
           </div>
 
           <div className="text-[11px] font-bold text-amber-200 text-center">
-            {charge >= 0.8
+            {charge >= 0.75
               ? '⚡ FULLY CHARGED! Move to Paper!'
               : `Charge: ${Math.round(charge * 100)}% (Rub to charge)`}
           </div>
@@ -379,7 +383,7 @@ export const Level1PaperHeist: React.FC = () => {
             >
               <div
                 className={`w-7 h-5 sm:w-9 sm:h-6 rounded bg-slate-100 border border-slate-400 shadow-md flex items-center justify-center font-bold text-[9px] text-slate-700 transition-colors ${
-                  paper.isStuck ? 'bg-yellow-100 border-yellow-400 ring-2 ring-yellow-300' : ''
+                  paper.isAttached ? 'bg-yellow-100 border-yellow-400 ring-2 ring-yellow-300' : ''
                 }`}
               >
                 {showInvisibleCharges ? (
@@ -492,42 +496,70 @@ export const Level1PaperHeist: React.FC = () => {
 
         {/* Paper Target Zone Label */}
         <div className="absolute right-24 sm:right-36 bottom-6 pointer-events-none text-center">
-          <div className="text-xs font-black uppercase tracking-wider text-slate-400 bg-slate-900/80 px-3 py-1 rounded-full border border-slate-700">
-            Paper Target Zone ({stuckCount}/6 Stuck)
+          <div className="text-xs font-black uppercase tracking-wider text-slate-400 bg-slate-900/80 px-3.5 py-1.5 rounded-full border border-slate-700 shadow flex items-center gap-2">
+            <span>Paper Scraps Target</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs ${attachedCount === TOTAL_PAPERS ? 'bg-emerald-500 text-white font-black' : 'bg-slate-800 text-yellow-300 font-bold'}`}>
+              {attachedCount}/{TOTAL_PAPERS} Attached
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Bottom Professor Zappy Assistant */}
+      {/* Bottom Professor Zappy & Live Action Bar */}
       <div className="relative z-30 flex items-end justify-between">
         <ProfessorZappy
           size="md"
           position="inline"
-          mood={stuckCount >= 6 ? 'excited' : isRubbing ? 'surprised' : 'idle'}
+          mood={attachedCount >= TOTAL_PAPERS ? 'celebrating' : isRubbing ? 'surprised' : 'idle'}
           staticHairCharge={charge}
         />
 
-        {gameState === 'completed' && (
-          <button
-            type="button"
-            onClick={() => completeLevel('level-1', 3, 100)}
-            className="px-6 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-sm sm:text-base rounded-2xl comic-border-yellow comic-button shadow-2xl flex items-center gap-2 cursor-pointer animate-bounce"
-          >
-            <span>Proceed to Next Experiment!</span>
-            <ArrowRight className="w-5 h-5" />
-          </button>
+        {/* If completed, show clear quick action pills */}
+        {isCompleted && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLearningChoice(true)}
+              className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl comic-border-yellow comic-button shadow flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Experiment Options</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => startLevel('level-2')}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl comic-border comic-button flex items-center gap-1.5"
+            >
+              <span>Next Station →</span>
+            </button>
+          </div>
         )}
       </div>
 
-      {/* PREDICTION CHALLENGE MODAL (Appears ONLY after paper attraction reaction!) */}
+      {/* OPTIONAL LEARNING MODAL (Clean prompt to choose what to do next) */}
+      <OptionalLearningModal
+        isOpen={showLearningChoice}
+        levelTitle="The Paper Heist"
+        onKeepExperimenting={() => setShowLearningChoice(false)}
+        onLearnWhy={() => {
+          setShowLearningChoice(false);
+          setShowExplanation(true);
+        }}
+        onTryQuestion={() => {
+          setShowLearningChoice(false);
+          setShowPrediction(true);
+        }}
+        onNextLevel={() => startLevel('level-2')}
+      />
+
+      {/* OPTIONAL PREDICTION QUESTION (Only shown when explicitly chosen) */}
       <PredictionModal
         isOpen={showPrediction}
         question="You watched the paper jump against gravity and stick! What caused the neutral paper to fly up?"
-        subtitle="Analyze your experimental observation!"
+        subtitle="Test your scientific hypothesis!"
         options={PREDICTION_OPTIONS}
         onCorrect={() => {
           setShowPrediction(false);
-          setShowExplanation(true);
           setDialogue(
             "BRILLIANT DEDUCTION! The ruler shifted the atomic charges inside the neutral paper—a phenomenon called induced polarization!",
             'celebrating'
@@ -535,7 +567,7 @@ export const Level1PaperHeist: React.FC = () => {
         }}
       />
 
-      {/* SCIENCE EXPLANATION MODAL (Follows Question) */}
+      {/* SCIENCE EXPLANATION (Only shown when explicitly chosen) */}
       <AnimatePresence>
         {showExplanation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
@@ -552,13 +584,7 @@ export const Level1PaperHeist: React.FC = () => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowExplanation(false);
-                    if (gameState === 'question') {
-                      setIsCompleted(true);
-                      setGameState('completed');
-                    }
-                  }}
+                  onClick={() => setShowExplanation(false)}
                   className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold"
                 >
                   Close
@@ -567,16 +593,16 @@ export const Level1PaperHeist: React.FC = () => {
 
               <div className="space-y-3 text-xs sm:text-sm text-slate-200">
                 <p>
-                  <strong>1. Friction transfers electrons:</strong> Rubbing the plastic ruler on the wool cloth caused electrons to move from the wool to the ruler. The ruler gained extra electrons, becoming <em>negatively charged (−)</em>.
+                  <strong>1. Friction transfers electrons:</strong> Rubbing the plastic ruler on the wool cloth caused electrons to move from the wool onto the plastic. The ruler gained extra electrons, becoming <em>negatively charged (−)</em>.
                 </p>
                 <p>
-                  <strong>2. Neutral objects contain balanced charges:</strong> Paper pieces are neutral (equal protons and electrons), not empty of charges.
+                  <strong>2. Neutral objects contain balanced charges:</strong> Paper pieces are neutral (equal positive protons and negative electrons), not empty of charges.
                 </p>
                 <p>
                   <strong>3. Induced Polarization:</strong> When the negative ruler approached, electrons inside the paper atoms were repelled slightly deeper. This left the side of the paper facing the ruler with a <em>relative positive charge</em>!
                 </p>
                 <p>
-                  <strong>4. Electrostatic attraction defeats gravity:</strong> Because the closer positive side feels stronger attraction than the farther negative side feels repulsion, the paper leaps upward!
+                  <strong>4. Attraction overcomes gravity:</strong> Because the closer positive side feels stronger attraction than the farther negative side feels repulsion, the paper leaps upward and clings to the ruler!
                 </p>
               </div>
 
@@ -586,33 +612,15 @@ export const Level1PaperHeist: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowExplanation(false);
-                  setIsCompleted(true);
-                  setGameState('completed');
-                }}
+                onClick={() => setShowExplanation(false)}
                 className="w-full py-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-xl comic-border-yellow"
               >
-                Claim Victory & Stars!
+                Back to Experiment
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* LEVEL COMPLETE MODAL (Appears after Explanation is confirmed) */}
-      <LevelCompleteModal
-        isOpen={isCompleted}
-        levelId="level-1"
-        levelTitle="The Paper Heist"
-        starsEarned={3}
-        xpGained={175}
-        unlockedPageTitle="What is Static Electricity? & Why Does Paper Jump?"
-        keyTakeaway="Friction transfers electrons, and a charged object can attract neutral objects by polarizing their atomic charges!"
-        onNextLevel={() => startLevel('level-2')}
-        onReplay={resetExperiment}
-        onClose={() => setView('map')}
-      />
     </div>
   );
 };
